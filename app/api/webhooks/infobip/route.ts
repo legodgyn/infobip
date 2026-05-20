@@ -125,7 +125,14 @@ async function findClientIdByNumber(from?: string | null, to?: string | null) {
     });
   });
 
-  return found?.clientId || null;
+  if (found?.clientId) return found.clientId;
+
+  const fallbackClient = await prisma.client.findFirst({
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+
+  return fallbackClient?.id || null;
 }
 
 export async function POST(req: Request) {

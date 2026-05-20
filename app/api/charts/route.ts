@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { format } from "date-fns";
 import { getCurrentUser } from "@/lib/auth";
+import { buildMessageWhere } from "@/lib/message-filters";
 
 export async function GET(req: Request) {
   const user = await getCurrentUser();
@@ -24,31 +25,8 @@ export async function GET(req: Request) {
   const clientId =
     user.role === "admin" ? clientIdParam : user.clientId || undefined;
 
-  const dateWhere =
-    start || end
-      ? {
-          createdAt: {
-            ...(start && { gte: new Date(`${start}T00:00:00`) }),
-            ...(end && { lte: new Date(`${end}T23:59:59`) }),
-          },
-        }
-      : {};
-
-  const numberWhere = number
-    ? {
-        OR: [
-          { from: { contains: number.replace(/\D/g, "") } },
-          { to: { contains: number.replace(/\D/g, "") } },
-        ],
-      }
-    : {};
-
   const messages = await prisma.message.findMany({
-    where: {
-      ...(clientId && { clientId }),
-      ...dateWhere,
-      ...numberWhere,
-    },
+    where: buildMessageWhere({ clientId, number, start, end }),
     orderBy: { createdAt: "asc" },
   });
 

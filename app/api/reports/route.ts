@@ -1,5 +1,6 @@
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { buildMessageWhere } from "@/lib/message-filters";
 import { NextResponse } from "next/server";
 
 export async function GET(req: Request) {
@@ -24,29 +25,13 @@ export async function GET(req: Request) {
   const clientId =
     user.role === "admin" ? clientIdParam : user.clientId || undefined;
 
-  const where: any = {
-    ...(clientId && { clientId }),
-    ...(number
-      ? {
-          OR: [
-            { from: { contains: number.replace(/\D/g, "") } },
-            { to: { contains: number.replace(/\D/g, "") } },
-          ],
-        }
-      : {}),
-    ...(status &&
-      status !== "all" && {
-        status: { contains: status, mode: "insensitive" },
-      }),
-    ...(start || end
-      ? {
-          createdAt: {
-            ...(start && { gte: new Date(`${start}T00:00:00`) }),
-            ...(end && { lte: new Date(`${end}T23:59:59`) }),
-          },
-        }
-      : {}),
-  };
+  const where: any = buildMessageWhere({
+    clientId,
+    number,
+    start,
+    end,
+    status,
+  });
 
   const messages = await prisma.message.findMany({
     where,
