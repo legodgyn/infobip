@@ -16,6 +16,32 @@ export type InfobipConfig = {
   source: "database" | "env" | "mixed" | "none";
 };
 
+type InfobipSenderSyncState = {
+  running: boolean;
+  startedAt: string | null;
+  finishedAt: string | null;
+  ok: boolean | null;
+  status: number | null;
+  message: string;
+  total: number;
+};
+
+const globalForInfobip = globalThis as typeof globalThis & {
+  infobipSenderSyncState?: InfobipSenderSyncState;
+};
+
+const infobipSenderSyncState =
+  globalForInfobip.infobipSenderSyncState ||
+  (globalForInfobip.infobipSenderSyncState = {
+    running: false,
+    startedAt: null,
+    finishedAt: null,
+    ok: null,
+    status: null,
+    message: "",
+    total: 0,
+  });
+
 function encryptionKey() {
   const secret =
     process.env.JWT_SECRET ||
@@ -319,14 +345,25 @@ export async function refreshInfobipSenders() {
     };
   }
 
-  const res = await fetch(`${config.baseUrl}/whatsapp/1/senders`, {
-    method: "GET",
-    headers: {
-      Authorization: `App ${config.apiKey}`,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  });
+  let res: Response;
+
+  try {
+    res = await fetch(`${config.baseUrl}/whatsapp/1/senders`, {
+      method: "GET",
+      headers: {
+        Authorization: `App ${config.apiKey}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+  } catch (error: any) {
+    return {
+      ok: false,
+      status: 0,
+      message: error?.message || "NÃ£o foi possÃ­vel carregar os nÃºmeros da Infobip.",
+      senders: await listInfobipSenders({ limit: 300 }),
+    };
+  }
 
   const responseText = await res.text();
   let details: any = null;
@@ -347,6 +384,55 @@ export async function refreshInfobipSenders() {
       : "Não foi possível carregar os números da Infobip.",
     senders: await listInfobipSenders({ limit: 300 }),
     details: summarizeInfobipDetails(details, synced),
+  };
+}
+
+export function getInfobipSenderSyncState() {
+  return { ...infobipSenderSyncState };
+}
+
+export function startInfobipSenderSync() {
+  if (infobipSenderSyncState.running) {
+    return {
+      started: false,
+      sync: getInfobipSenderSyncState(),
+      message: "A sincronizaÃ§Ã£o de nÃºmeros jÃ¡ estÃ¡ em andamento.",
+    };
+  }
+
+  infobipSenderSyncState.running = true;
+  infobipSenderSyncState.startedAt = new Date().toISOString();
+  infobipSenderSyncState.finishedAt = null;
+  infobipSenderSyncState.ok = null;
+  infobipSenderSyncState.status = null;
+  infobipSenderSyncState.message = "SincronizaÃ§Ã£o de nÃºmeros iniciada.";
+  infobipSenderSyncState.total = 0;
+
+  void refreshInfobipSenders()
+    .then((result) => {
+      infobipSenderSyncState.ok = result.ok;
+      infobipSenderSyncState.status = result.status;
+      infobipSenderSyncState.message = result.message;
+      infobipSenderSyncState.total =
+        typeof result.details?.total === "number"
+          ? result.details.total
+          : result.senders?.length || 0;
+    })
+    .catch((error: any) => {
+      infobipSenderSyncState.ok = false;
+      infobipSenderSyncState.status = 0;
+      infobipSenderSyncState.message =
+        error?.message || "NÃ£o foi possÃ­vel carregar os nÃºmeros da Infobip.";
+    })
+    .finally(() => {
+      infobipSenderSyncState.running = false;
+      infobipSenderSyncState.finishedAt = new Date().toISOString();
+    });
+
+  return {
+    started: true,
+    sync: getInfobipSenderSyncState(),
+    message: "SincronizaÃ§Ã£o de nÃºmeros iniciada. A lista serÃ¡ atualizada em instantes.",
   };
 }
 

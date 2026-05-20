@@ -74,6 +74,7 @@ export default function SettingsPage() {
   const [selectedSenderNumbers, setSelectedSenderNumbers] = useState<string[]>([]);
   const [senderSearch, setSenderSearch] = useState("");
   const [syncingSenders, setSyncingSenders] = useState(false);
+  const [senderSync, setSenderSync] = useState<any>(null);
   const [importingNumbers, setImportingNumbers] = useState(false);
   const [form, setForm] = useState({
     baseUrl: "",
@@ -96,6 +97,7 @@ export default function SettingsPage() {
     if (res.ok) {
       const list = Array.isArray(data?.senders) ? data.senders : [];
       setSenders(list);
+      setSenderSync(data?.sync || null);
     }
   }
 
@@ -107,7 +109,7 @@ export default function SettingsPage() {
       const res = await fetch("/api/settings/infobip", { cache: "no-store" });
       const data = await readApiResponse(res);
 
-      if (!res.ok) {
+      if (!res.ok && res.status !== 202) {
         throw new Error(data?.error || "Erro ao carregar configurações.");
       }
 
@@ -240,6 +242,7 @@ export default function SettingsPage() {
 
       const list = Array.isArray(data?.senders) ? data.senders : [];
       setSenders(list);
+      setSenderSync(data?.sync || null);
       setSelectedSenderNumbers((prev) =>
         prev.filter((number) =>
           list.some((sender: any) => String(sender.sender) === String(number))
@@ -280,6 +283,17 @@ export default function SettingsPage() {
       setImportingNumbers(false);
     }
   }
+
+  useEffect(() => {
+    if (!senderSync?.running) return;
+
+    const timer = window.setInterval(() => {
+      loadSenders(senderSearch);
+    }, 3000);
+
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [senderSync?.running, senderSearch]);
 
   const senderSearchTerm = senderSearch.trim().toLowerCase();
   const filteredSenders = senderSearchTerm
@@ -638,6 +652,13 @@ export default function SettingsPage() {
                 </Button>
                 </Stack>
               </Stack>
+
+              {senderSync?.running && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  SincronizaÃ§Ã£o em andamento. VocÃª pode continuar filtrando e importando os
+                  nÃºmeros que jÃ¡ apareceram.
+                </Alert>
+              )}
 
               {senders.length > 0 && (
                 <Stack
