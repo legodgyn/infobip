@@ -10,6 +10,10 @@ export function removeRealtimeClient(controller: ReadableStreamDefaultController
 
 export function notifyRealtime() {
   for (const controller of clients) {
-    controller.enqueue(`data: ${JSON.stringify({ type: "update" })}\n\n`);
+    try {
+      controller.enqueue(`data: ${JSON.stringify({ type: "update" })}\n\n`);
+    } catch {
+      clients.delete(controller);
+    }
   }
 }
