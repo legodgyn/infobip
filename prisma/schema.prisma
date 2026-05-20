@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String  @id @default(cuid())
+  name      String
+  email     String  @unique
+  password  String
+  role      String  @default("client")
+
+  clientId  String?
+  client    Client? @relation(fields: [clientId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model Client {
+  id        String @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+
+  users     User[]
+  numbers   ClientNumber[]
+  messages  Message[]
+
+  createdAt DateTime @default(now())
+}
+
+model ClientNumber {
+  id        String @id @default(cuid())
+  number    String @unique
+  label     String?
+
+  clientId  String
+  client    Client @relation(fields: [clientId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model Message {
+  id            String  @id @default(cuid())
+  infobipMsgId  String? @unique
+
+  clientId      String?
+  client        Client? @relation(fields: [clientId], references: [id])
+
+  campaignName  String?
+  from          String?
+  to            String?
+  direction     String
+  text          String?
+  status        String?
+  failureReason String?
+
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  seenAt        DateTime?
+  failedAt      DateTime?
+  receivedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  raw           Json?
+  events        MessageEvent[]
+}
+
+model MessageEvent {
+  id            String   @id @default(cuid())
+  messageId     String?
+  message       Message? @relation(fields: [messageId], references: [id])
+  infobipMsgId  String?
+  status        String?
+  description   String?
+  raw           Json?
+  createdAt     DateTime @default(now())
+}
+
+model AppSetting {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model InfobipSender {
+  sender      String   @id
+  displayName String?
+  status      String?
+  raw         Json?
+  syncedAt    DateTime @default(now())
+}
