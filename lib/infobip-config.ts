@@ -109,6 +109,61 @@ function normalizeSenderNumber(value?: string | null) {
   return String(value || "").replace(/\D/g, "");
 }
 
+function compactSenderRaw(item: any) {
+  return {
+    sender: item?.sender || item?.number || item?.phoneNumber || item?.from || null,
+    displayName:
+      item?.displayName ||
+      item?.name ||
+      item?.businessName ||
+      item?.profile?.name ||
+      null,
+    status: item?.status || item?.state || null,
+    testSender: Boolean(item?.testSender),
+    keywords: Array.isArray(item?.keywords) ? item.keywords : [],
+    numberKey: item?.numberKey || null,
+    qualityRating: item?.qualityRating || null,
+    limit: item?.limit || null,
+    connectionStatus: item?.connectionStatus || null,
+  };
+}
+
+function summarizeInfobipDetails(details: any, senders?: any[]) {
+  if (Array.isArray(senders)) {
+    return {
+      total: senders.length,
+      senders: senders.map((sender) => ({
+        sender: sender.sender,
+        displayName: sender.displayName,
+        status: sender.status,
+      })),
+    };
+  }
+
+  if (Array.isArray(details)) {
+    return { total: details.length };
+  }
+
+  if (details && typeof details === "object") {
+    const source =
+      details.senders || details.items || details.results || details.data || [];
+
+    return {
+      total: Array.isArray(source) ? source.length : undefined,
+      requestError: details.requestError,
+      errorCode: details.errorCode,
+      message: details.message,
+      description: details.description,
+    };
+  }
+
+  if (typeof details === "string") {
+    return details.slice(0, 500);
+  }
+
+  return details;
+}
+
 function extractSenders(details: any) {
   const source = Array.isArray(details)
     ? details
@@ -140,7 +195,7 @@ function extractSenders(details: any) {
           item?.status ||
           item?.state ||
           (item?.testSender ? "testSender" : null),
-        raw: item,
+        raw: compactSenderRaw(item),
       };
     })
     .filter(Boolean);
@@ -152,6 +207,15 @@ export async function listInfobipSenders() {
 
   try {
     return await infobipSender.findMany({
+      select: {
+        id: true,
+        sender: true,
+        displayName: true,
+        status: true,
+        syncedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
       orderBy: [{ displayName: "asc" }, { sender: "asc" }],
     });
   } catch {
@@ -230,7 +294,7 @@ export async function refreshInfobipSenders() {
       ? `${synced.length} número(s) sincronizado(s).`
       : "Não foi possível carregar os números da Infobip.",
     senders: synced.length ? synced : await listInfobipSenders(),
-    details,
+    details: summarizeInfobipDetails(details, synced),
   };
 }
 
@@ -418,7 +482,7 @@ export async function testInfobipConfig(config: {
         endpoint: endpoint.path,
         status: res.status,
         ok: res.ok,
-        details,
+        details: summarizeInfobipDetails(details),
       });
 
       if (res.ok || res.status === 405) {
@@ -432,7 +496,7 @@ export async function testInfobipConfig(config: {
           status: res.status,
           latencyMs: Date.now() - startedAt,
           message: "A URL base respondeu e a API aceitou a chamada.",
-          details,
+          details: summarizeInfobipDetails(details, syncedSenders),
           senders: syncedSenders.length ? syncedSenders : undefined,
           attempts,
         };
@@ -445,7 +509,7 @@ export async function testInfobipConfig(config: {
           latencyMs: Date.now() - startedAt,
           message:
             "A Infobip respondeu, mas recusou a API key. Cole a chave sem o prefixo App e confira as permissões.",
-          details,
+          details: summarizeInfobipDetails(details),
           attempts,
         };
       }
