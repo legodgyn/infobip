@@ -82,9 +82,13 @@ export default function SettingsPage() {
     apiKeyConfigured: false,
     source: "none",
   });
+  const configured = Boolean(form.baseUrl && form.apiKeyConfigured);
 
-  async function loadSenders() {
-    const res = await fetch("/api/settings/infobip/senders", {
+  async function loadSenders(search = senderSearch) {
+    const params = new URLSearchParams({ limit: "300" });
+    if (search.trim()) params.set("search", search.trim());
+
+    const res = await fetch(`/api/settings/infobip/senders?${params}`, {
       cache: "no-store",
     });
     const data = await readApiResponse(res);
@@ -92,11 +96,6 @@ export default function SettingsPage() {
     if (res.ok) {
       const list = Array.isArray(data?.senders) ? data.senders : [];
       setSenders(list);
-      setSelectedSenderNumbers((prev) =>
-        prev.filter((number) =>
-          list.some((sender: any) => String(sender.sender) === String(number))
-        )
-      );
     }
   }
 
@@ -131,6 +130,17 @@ export default function SettingsPage() {
     loadConfig();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!configured) return;
+
+    const timeout = window.setTimeout(() => {
+      loadSenders(senderSearch);
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [senderSearch, configured]);
 
   async function saveConfig() {
     setSaving(true);
@@ -190,7 +200,7 @@ export default function SettingsPage() {
       setTestResult(data);
       if (Array.isArray(data?.senders)) {
         setSenders(data.senders);
-        setSelectedSenderNumbers(data.senders.map((sender: any) => sender.sender));
+        setSelectedSenderNumbers([]);
       }
 
       if (!res.ok) {
@@ -203,7 +213,7 @@ export default function SettingsPage() {
 
       if (Array.isArray(data?.senders)) {
         setSenders(data.senders);
-        setSelectedSenderNumbers(data.senders.map((sender: any) => sender.sender));
+        setSelectedSenderNumbers([]);
       }
       setMessage(data?.message || "Conexão validada com sucesso.");
     } catch (err: any) {
@@ -230,7 +240,11 @@ export default function SettingsPage() {
 
       const list = Array.isArray(data?.senders) ? data.senders : [];
       setSenders(list);
-      setSelectedSenderNumbers(list.map((sender: any) => sender.sender));
+      setSelectedSenderNumbers((prev) =>
+        prev.filter((number) =>
+          list.some((sender: any) => String(sender.sender) === String(number))
+        )
+      );
       setMessage(data?.message || "Números atualizados.");
     } catch (err: any) {
       setError(err?.message || "Não foi possível atualizar os números.");
@@ -267,7 +281,6 @@ export default function SettingsPage() {
     }
   }
 
-  const configured = Boolean(form.baseUrl && form.apiKeyConfigured);
   const senderSearchTerm = senderSearch.trim().toLowerCase();
   const filteredSenders = senderSearchTerm
     ? senders.filter((sender) =>

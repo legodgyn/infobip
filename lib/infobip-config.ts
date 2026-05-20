@@ -164,6 +164,23 @@ function summarizeInfobipDetails(details: any, senders?: any[]) {
   return details;
 }
 
+async function ensureInfobipSenderTable() {
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "InfobipSender" (
+        "sender" TEXT NOT NULL,
+        "displayName" TEXT,
+        "status" TEXT,
+        "raw" JSONB,
+        "syncedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "InfobipSender_pkey" PRIMARY KEY ("sender")
+      )
+    `);
+  } catch {
+    // The route can still return an empty list if the database is unavailable.
+  }
+}
+
 function extractSenders(details: any) {
   const source = Array.isArray(details)
     ? details
@@ -201,22 +218,37 @@ function extractSenders(details: any) {
     .filter(Boolean);
 }
 
-export async function listInfobipSenders() {
+export async function listInfobipSenders(options?: {
+  search?: string;
+  limit?: number;
+}) {
   const infobipSender = (prisma as any).infobipSender;
   if (!infobipSender) return [];
+
+  await ensureInfobipSenderTable();
+
+  const search = options?.search?.trim();
+  const limit = Math.min(Math.max(options?.limit || 300, 1), 1000);
 
   try {
     return await infobipSender.findMany({
       select: {
-        id: true,
         sender: true,
         displayName: true,
         status: true,
         syncedAt: true,
-        createdAt: true,
-        updatedAt: true,
       },
+      where: search
+        ? {
+            OR: [
+              { sender: { contains: search, mode: "insensitive" } },
+              { displayName: { contains: search, mode: "insensitive" } },
+              { status: { contains: search, mode: "insensitive" } },
+            ],
+          }
+        : undefined,
       orderBy: [{ displayName: "asc" }, { sender: "asc" }],
+      take: limit,
     });
   } catch {
     return [];
@@ -229,23 +261,43 @@ async function saveInfobipSendersFromDetails(details: any) {
 
   if (!infobipSender) return senders;
 
+  await ensureInfobipSenderTable();
+
   try {
-    for (const item of senders) {
-      await infobipSender.upsert({
-        where: { sender: item.sender },
-        update: {
-          displayName: item.displayName,
-          status: item.status,
-          raw: item.raw,
-          syncedAt: new Date(),
-        },
-        create: {
-          sender: item.sender,
-          displayName: item.displayName,
-          status: item.status,
-          raw: item.raw,
-        },
+    const chunkSize = 100;
+
+    for (let i = 0; i < senders.length; i += chunkSize) {
+      const chunk = senders.slice(i, i + chunkSize);
+      const values: string[] = [];
+      const params: any[] = [];
+
+      chunk.forEach((item: any, index: number) => {
+        const offset = index * 4;
+        values.push(
+          `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${
+            offset + 4
+          }::jsonb, NOW())`
+        );
+        params.push(
+          item.sender,
+          item.displayName,
+          item.status,
+          JSON.stringify(item.raw || {})
+        );
       });
+
+      await prisma.$executeRawUnsafe(
+        `
+          INSERT INTO "InfobipSender" ("sender", "displayName", "status", "raw", "syncedAt")
+          VALUES ${values.join(",")}
+          ON CONFLICT ("sender") DO UPDATE SET
+            "displayName" = EXCLUDED."displayName",
+            "status" = EXCLUDED."status",
+            "raw" = EXCLUDED."raw",
+            "syncedAt" = NOW()
+        `,
+        ...params
+      );
     }
   } catch {
     return senders;
@@ -293,7 +345,7 @@ export async function refreshInfobipSenders() {
     message: res.ok
       ? `${synced.length} número(s) sincronizado(s).`
       : "Não foi possível carregar os números da Infobip.",
-    senders: synced.length ? synced : await listInfobipSenders(),
+    senders: await listInfobipSenders({ limit: 300 }),
     details: summarizeInfobipDetails(details, synced),
   };
 }
@@ -319,10 +371,18 @@ export async function importInfobipSendersToClient(
       }))
     )?.id;
 
-  const synced = await refreshInfobipSenders();
   const selectedSet = new Set(
     (selectedNumbers || []).map((number) => normalizeSenderNumber(number))
   );
+  if (selectedSet.size) await ensureInfobipSenderTable();
+  const synced = selectedSet.size
+    ? {
+        senders: await (prisma as any).infobipSender.findMany({
+          where: { sender: { in: Array.from(selectedSet) } },
+          select: { sender: true, displayName: true, status: true },
+        }),
+      }
+    : await refreshInfobipSenders();
   const senders = (synced.senders || []).filter((sender: any) => {
     if (!selectedSet.size) return true;
     return selectedSet.has(normalizeSenderNumber(sender.sender));
