@@ -3,21 +3,18 @@ import { getCurrentUser } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
-  await getCurrentUser();
+  const user = await getCurrentUser();
+
+  if (!user || user.role !== "admin") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const body = await req.json();
 
-  const cleaned = String(body.number || "").replace(/\D/g, "");
-
-  const number = await prisma.clientNumber.upsert({
-    where: { number: cleaned },
-    update: {
+  const number = await prisma.clientNumber.create({
+    data: {
       clientId: body.clientId,
-      label: body.label || null,
-    },
-    create: {
-      clientId: body.clientId,
-      number: cleaned,
+      number: String(body.number || "").replace(/\D/g, ""),
       label: body.label || null,
     },
   });

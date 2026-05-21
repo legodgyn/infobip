@@ -103,7 +103,6 @@ function buildQuery(filters: any) {
   const params = new URLSearchParams();
 
   if (filters.clientId) params.set("clientId", filters.clientId);
-  if (filters.number) params.set("number", filters.number);
   if (filters.status && filters.status !== "all") {
     params.set("status", filters.status);
   }
@@ -154,7 +153,6 @@ export default function ReportsPage() {
 
   const [filters, setFilters] = useState({
     clientId: "",
-    number: "",
     status: "all",
     start: "",
     end: "",
@@ -189,46 +187,8 @@ export default function ReportsPage() {
 
   useEffect(() => {
     loadReports();
-
-    const timer = setInterval(loadReports, 5000);
-    return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
-
-  useEffect(() => {
-    const events = new EventSource("/api/realtime");
-
-    events.onmessage = () => {
-      loadClients();
-      loadReports();
-    };
-
-    return () => {
-      events.close();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
-
-  const availableNumbers = useMemo(() => {
-    const map = new Map<string, any>();
-
-    for (const client of clients) {
-      if (filters.clientId && client.id !== filters.clientId) continue;
-
-      for (const item of client.numbers || []) {
-        const number = String(item.number || "").replace(/\D/g, "");
-        if (!number) continue;
-
-        map.set(number, {
-          ...item,
-          number,
-          label: item.label || client.name || "Infobip",
-        });
-      }
-    }
-
-    return Array.from(map.values());
-  }, [clients, filters.clientId]);
 
   const total = rows.length;
 
@@ -313,7 +273,6 @@ export default function ReportsPage() {
   function clearFilters() {
     setFilters({
       clientId: "",
-      number: "",
       status: "all",
       start: "",
       end: "",
@@ -442,7 +401,7 @@ export default function ReportsPage() {
                     display: "grid",
                     gridTemplateColumns: {
                       xs: "1fr",
-                      md: "1.2fr 1.2fr 1fr 1fr 1fr auto",
+                      md: "1.2fr 1fr 1fr 1fr auto",
                     },
                     gap: 2,
                     alignItems: "end",
@@ -457,7 +416,6 @@ export default function ReportsPage() {
                         setFilters((prev) => ({
                           ...prev,
                           clientId: e.target.value,
-                          number: "",
                         }))
                       }
                     >
@@ -465,28 +423,6 @@ export default function ReportsPage() {
                       {clients.map((client) => (
                         <MenuItem key={client.id} value={client.id}>
                           {client.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-
-                  <FormControl fullWidth>
-                    <InputLabel>Número</InputLabel>
-                    <Select
-                      label="Número"
-                      value={filters.number}
-                      onChange={(e) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          number: e.target.value,
-                        }))
-                      }
-                      disabled={!availableNumbers.length}
-                    >
-                      <MenuItem value="">Todos os números</MenuItem>
-                      {availableNumbers.map((item: any) => (
-                        <MenuItem key={item.number} value={item.number}>
-                          {item.label ? `${item.label} • ${item.number}` : item.number}
                         </MenuItem>
                       ))}
                     </Select>

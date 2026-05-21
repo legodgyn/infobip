@@ -2,17 +2,12 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { format } from "date-fns";
 import { getCurrentUser } from "@/lib/auth";
-import { buildMessageWhere } from "@/lib/message-filters";
 
 export async function GET(req: Request) {
   const user = await getCurrentUser();
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (user.role !== "admin" && !user.clientId) {
-    return NextResponse.json([]);
   }
 
   const { searchParams } = new URL(req.url);
@@ -25,21 +20,31 @@ export async function GET(req: Request) {
   const clientId =
     user.role === "admin" ? clientIdParam : user.clientId || undefined;
 
-  const clientNumbers = clientId
-    ? await prisma.clientNumber.findMany({
-        where: { clientId },
-        select: { number: true },
-      })
-    : [];
+  const dateWhere =
+    start || end
+      ? {
+          createdAt: {
+            ...(start && { gte: new Date(`${start}T00:00:00`) }),
+            ...(end && { lte: new Date(`${end}T23:59:59`) }),
+          },
+        }
+      : {};
+
+  const numberWhere = number
+    ? {
+        OR: [
+          { from: { contains: number.replace(/\D/g, "") } },
+          { to: { contains: number.replace(/\D/g, "") } },
+        ],
+      }
+    : {};
 
   const messages = await prisma.message.findMany({
-    where: buildMessageWhere({
-      clientId,
-      number,
-      numbers: clientNumbers.map((item) => item.number),
-      start,
-      end,
-    }),
+    where: {
+      ...(clientId && { clientId }),
+      ...dateWhere,
+      ...numberWhere,
+    },
     orderBy: { createdAt: "asc" },
   });
 

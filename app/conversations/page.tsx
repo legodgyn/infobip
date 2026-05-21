@@ -64,7 +64,7 @@ function normalizePhone(phone?: string) {
 
 export default function ConversationsPage() {
   const [conversations, setConversations] = useState<any[]>([]);
-  const [selectedConversationId, setSelectedConversationId] = useState("");
+  const [selectedContact, setSelectedContact] = useState("");
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -79,8 +79,8 @@ export default function ConversationsPage() {
     const list = Array.isArray(data) ? data : [];
     setConversations(list);
 
-    if ((!keepSelected || !selectedConversationId) && list?.[0]?.id) {
-      setSelectedConversationId(list[0].id);
+    if ((!keepSelected || !selectedContact) && list?.[0]?.contact) {
+      setSelectedContact(list[0].contact);
       setSelectedFrom(list[0].businessNumber || "");
     }
   }
@@ -118,50 +118,34 @@ export default function ConversationsPage() {
     });
   }, [conversations, search]);
 
-  const selected = conversations.find((c) => c.id === selectedConversationId);
+  const selected = conversations.find((c) => c.contact === selectedContact);
 
-  const messages = useMemo(() => {
-    return selected?.messages
-      ? [...selected.messages].sort(
-          (a: any, b: any) =>
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        )
-      : [];
-  }, [selected?.messages]);
+  const messages = selected?.messages
+    ? [...selected.messages].sort(
+        (a: any, b: any) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      )
+    : [];
 
   const lastMessage = messages[messages.length - 1];
 
   const availableNumbers = useMemo(() => {
-    const map = new Map<string, any>();
+    const set = new Set<string>();
 
-    for (const item of selected?.availableNumbers || []) {
-      const number = normalizePhone(item.number);
-      if (number) map.set(number, { ...item, number });
-    }
-
-    if (selected?.businessNumber) {
-      const number = normalizePhone(selected.businessNumber);
-      if (number && !map.has(number)) {
-        map.set(number, {
-          id: "conversation-number",
-          number,
-          label: "Número da conversa",
-        });
-      }
-    }
+    if (selected?.businessNumber) set.add(normalizePhone(selected.businessNumber));
 
     for (const msg of messages) {
       if (msg.direction === "inbound") {
         const n = normalizePhone(msg.to);
-        if (n && !map.has(n)) map.set(n, { id: n, number: n });
+        if (n) set.add(n);
       } else {
         const n = normalizePhone(msg.from);
-        if (n && !map.has(n)) map.set(n, { id: n, number: n });
+        if (n) set.add(n);
       }
     }
 
-    return Array.from(map.values());
-  }, [selected?.availableNumbers, selected?.businessNumber, messages]);
+    return Array.from(set);
+  }, [selected?.businessNumber, messages]);
 
   useEffect(() => {
     if (selected?.businessNumber) {
@@ -170,18 +154,18 @@ export default function ConversationsPage() {
     }
 
     if (availableNumbers[0]) {
-      setSelectedFrom(availableNumbers[0].number);
+      setSelectedFrom(availableNumbers[0]);
     }
   }, [selected?.businessNumber, availableNumbers]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [selectedConversationId, messages.length]);
+  }, [selectedContact, messages.length]);
 
   async function sendMessage() {
     const text = message.trim();
 
-    if (!text || !selected?.contact || !selectedFrom || sending) return;
+    if (!text || !selectedContact || sending) return;
 
     setSending(true);
     setSendError("");
@@ -193,9 +177,8 @@ export default function ConversationsPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          to: selected.contact,
+          to: selectedContact,
           from: selectedFrom || selected?.businessNumber,
-          clientId: selected?.clientId,
           text,
         }),
       });
@@ -292,15 +275,14 @@ export default function ConversationsPage() {
 
             <Box sx={{ overflow: "auto", flex: 1 }}>
               {filtered.map((conv) => {
-                const active = selectedConversationId === conv.id;
+                const active = selectedContact === conv.contact;
 
                 return (
                   <Box
-                    key={conv.id}
+                    key={conv.contact}
                     onClick={() => {
-                      setSelectedConversationId(conv.id);
+                      setSelectedContact(conv.contact);
                       setSelectedFrom(normalizePhone(conv.businessNumber || ""));
-                      setSendError("");
                     }}
                     sx={{
                       p: 1.7,
@@ -635,12 +617,6 @@ export default function ConversationsPage() {
                 </Alert>
               )}
 
-              {selected?.contact && !selectedFrom && (
-                <Alert severity="warning" sx={{ mb: 1 }}>
-                  Vincule um número Infobip a este cliente antes de responder.
-                </Alert>
-              )}
-
               <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                 <IconButton>
                   <Add />
@@ -663,11 +639,9 @@ export default function ConversationsPage() {
                     onChange={(e) => setSelectedFrom(e.target.value)}
                     sx={{ width: 210 }}
                   >
-                    {availableNumbers.map((item) => (
-                      <MenuItem key={item.number} value={item.number}>
-                        {item.label
-                          ? `${item.label} - ${formatPhone(item.number)}`
-                          : formatPhone(item.number)}
+                    {availableNumbers.map((number) => (
+                      <MenuItem key={number} value={number}>
+                        {formatPhone(number)}
                       </MenuItem>
                     ))}
                   </TextField>
@@ -677,12 +651,12 @@ export default function ConversationsPage() {
                   fullWidth
                   size="small"
                   placeholder={
-                    selected?.contact
+                    selectedContact
                       ? "Digite uma mensagem..."
                       : "Selecione uma conversa..."
                   }
                   value={message}
-                  disabled={!selected?.contact || !selectedFrom || sending}
+                  disabled={!selectedContact || sending}
                   onChange={(e) => setMessage(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
@@ -698,7 +672,7 @@ export default function ConversationsPage() {
 
                 <IconButton
                   color="primary"
-                  disabled={!message.trim() || !selected?.contact || !selectedFrom || sending}
+                  disabled={!message.trim() || !selectedContact || sending}
                   onClick={sendMessage}
                   sx={{
                     bgcolor: "#2563eb",

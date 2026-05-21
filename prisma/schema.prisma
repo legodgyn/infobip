@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -8,72 +7,81 @@ datasource db {
 }
 
 model User {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   name      String
-  email     String  @unique
+  email     String   @unique
   password  String
-  role      String  @default("client")
+
+  role      Role     @default(client)
 
   clientId  String?
-  client    Client? @relation(fields: [clientId], references: [id])
+  client    Client?  @relation(fields: [clientId], references: [id])
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Client {
-  id        String @id @default(cuid())
+  id        String   @id @default(cuid())
   name      String
-  email     String?
-  phone     String?
 
   users     User[]
   numbers   ClientNumber[]
   messages  Message[]
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model ClientNumber {
-  id        String @id @default(cuid())
-  number    String @unique
-  label     String?
+  id        String   @id @default(cuid())
+
+  number    String   // numero oficial infobip (ex: 5562999999999)
+  label     String?  // opcional: nome tipo "Suporte", "Vendas"
 
   clientId  String
-  client    Client @relation(fields: [clientId], references: [id])
+  client    Client   @relation(fields: [clientId], references: [id])
 
   createdAt DateTime @default(now())
 }
 
 model Message {
-  id            String  @id @default(cuid())
-  infobipMsgId  String? @unique
+  id            String   @id @default(cuid())
 
+  // identificação infobip
+  infobipMsgId  String?  @unique
+
+  // relacionamento
   clientId      String?
-  client        Client? @relation(fields: [clientId], references: [id])
+  client        Client?  @relation(fields: [clientId], references: [id])
+  events        MessageEvent[]
 
-  campaignName  String?
-  from          String?
-  to            String?
-  direction     String
+  // dados da mensagem
+  from          String
+  to            String
+
   text          String?
-  status        String?
-  failureReason String?
 
+  direction     Direction
+  status        String?
+
+  // timestamps
+  createdAt     DateTime @default(now())
   sentAt        DateTime?
+  receivedAt    DateTime?
   deliveredAt   DateTime?
   seenAt        DateTime?
   failedAt      DateTime?
-  receivedAt    DateTime?
-  createdAt     DateTime @default(now())
+  failureReason String?
 
+  // debug / raw infobip
   raw           Json?
-  events        MessageEvent[]
 }
 
 model MessageEvent {
   id            String   @id @default(cuid())
-  messageId     String?
-  message       Message? @relation(fields: [messageId], references: [id])
+  messageId     String
+  message       Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
   infobipMsgId  String?
   status        String?
   description   String?
@@ -81,17 +89,12 @@ model MessageEvent {
   createdAt     DateTime @default(now())
 }
 
-model AppSetting {
-  key       String   @id
-  value     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum Role {
+  admin
+  client
 }
 
-model InfobipSender {
-  sender      String   @id
-  displayName String?
-  status      String?
-  raw         Json?
-  syncedAt    DateTime @default(now())
+enum Direction {
+  inbound
+  outbound
 }

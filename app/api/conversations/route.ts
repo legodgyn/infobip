@@ -22,40 +22,11 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const clientNumbers = await prisma.clientNumber.findMany({
-    where:
-      user.role === "admin"
-        ? undefined
-        : {
-            clientId: user.clientId || "__NO_CLIENT__",
-          },
-    include: {
-      client: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-  });
-
-  const userNumbers = clientNumbers
-    .map((item) => normalizePhone(item.number))
-    .filter(Boolean);
-
-  const numberMatches = userNumbers.flatMap((number) => [
-    { from: { contains: number } },
-    { to: { contains: number } },
-  ]);
-
   const where =
     user.role === "admin"
       ? {}
       : {
-          OR: [
-            { clientId: user.clientId || "__NO_CLIENT__" },
-            ...numberMatches,
-          ],
+          clientId: user.clientId || "__NO_CLIENT__",
         };
 
   const messages = await prisma.message.findMany({
@@ -72,6 +43,17 @@ export async function GET() {
     take: 500,
   });
 
+  const clientNumbers = await prisma.clientNumber.findMany({
+    include: {
+      client: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  });
+
   const conversationsMap = new Map<string, any>();
 
   for (const msg of messages) {
@@ -86,45 +68,13 @@ export async function GET() {
 
     const clientId = msg.clientId || matchedNumber?.clientId || null;
     const clientName = msg.client?.name || matchedNumber?.client?.name || null;
-    const normalizedContact = normalizePhone(contact);
-    const normalizedBusinessNumber = normalizePhone(businessNumber);
-    const key = `${clientId || "no-client"}:${normalizedBusinessNumber || "no-sender"}:${normalizedContact}`;
+
+    const key = normalizePhone(contact);
 
     if (!conversationsMap.has(key)) {
-      const availableNumbers = clientNumbers
-        .filter((item) => {
-          if (clientId) return item.clientId === clientId;
-          if (normalizedBusinessNumber) {
-            return matchesPhone(item.number, normalizedBusinessNumber);
-          }
-          return false;
-        })
-        .map((item) => ({
-          id: item.id,
-          number: normalizePhone(item.number),
-          label: item.label,
-          clientId: item.clientId,
-          clientName: item.client?.name,
-        }));
-
-      if (
-        normalizedBusinessNumber &&
-        !availableNumbers.some((item) => matchesPhone(item.number, normalizedBusinessNumber))
-      ) {
-        availableNumbers.unshift({
-          id: "conversation-number",
-          number: normalizedBusinessNumber,
-          label: "Número da conversa",
-          clientId: clientId || "",
-          clientName: clientName || "",
-        });
-      }
-
       conversationsMap.set(key, {
-        id: key,
-        contact: normalizedContact,
-        businessNumber: normalizedBusinessNumber,
-        availableNumbers,
+        contact: normalizePhone(contact),
+        businessNumber: normalizePhone(businessNumber),
         clientId,
         clientName,
         lastMessage: msg.text || msg.status || "Sem conteúdo",

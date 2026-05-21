@@ -4,14 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack",
+    "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "postinstall": "prisma generate",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "seed:admin": "tsx scripts/seed-admin.ts",
-    "reset:admin": "tsx scripts/reset-admin.ts"
+    "lint": "eslint"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

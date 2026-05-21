@@ -1,6 +1,6 @@
-import { addRealtimeClient, removeRealtimeClient } from "@/lib/realtime";
-
 export const dynamic = "force-dynamic";
+
+import { addRealtimeClient, removeRealtimeClient } from "@/lib/realtime";
 
 export async function GET() {
   let streamController: ReadableStreamDefaultController | null = null;

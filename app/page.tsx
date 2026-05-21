@@ -59,21 +59,11 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("pt-BR").format(value || 0);
 }
 
-function formatDateTime(value?: string | null) {
-  if (!value) return "Sem registro";
-
-  return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "medium",
-  }).format(new Date(value));
-}
-
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(undefined);
   const [data, setData] = useState<any>(null);
   const [chartData, setChartData] = useState<any[]>(emptyChart);
   const [clients, setClients] = useState<any[]>([]);
-  const [senders, setSenders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   const [filters, setFilters] = useState({
@@ -89,40 +79,7 @@ export default function DashboardPage() {
     ? clients.find((client) => client.id === filters.clientId)
     : clients.find((client) => client.id === user?.clientId);
 
-  const allClientNumbers = useMemo(() => {
-    const map = new Map<string, any>();
-
-    for (const client of clients) {
-      for (const item of client.numbers || []) {
-        const number = String(item.number || "").replace(/\D/g, "");
-        if (!number) continue;
-
-        map.set(number, {
-          ...item,
-          id: item.id || number,
-          number,
-          label: item.label || client.name || "Infobip",
-        });
-      }
-    }
-
-    for (const sender of senders) {
-      const number = String(sender.sender || "").replace(/\D/g, "");
-      if (!number || map.has(number)) continue;
-
-      map.set(number, {
-        id: number,
-        number,
-        label: sender.displayName || sender.status || "Infobip",
-      });
-    }
-
-    return Array.from(map.values());
-  }, [clients, senders]);
-
-  const clientNumbers = selectedClient?.numbers?.length
-    ? selectedClient.numbers
-    : allClientNumbers;
+  const clientNumbers = selectedClient?.numbers || [];
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -142,8 +99,8 @@ export default function DashboardPage() {
 
     try {
       const [dashboardRes, chartsRes] = await Promise.all([
-        fetch(`/api/dashboard?${query}`, { cache: "no-store" }),
-        fetch(`/api/charts?${query}`, { cache: "no-store" }),
+        fetch(`/api/dashboard?${query}`),
+        fetch(`/api/charts?${query}`),
       ]);
 
       const dashboard = await dashboardRes.json();
@@ -176,18 +133,9 @@ export default function DashboardPage() {
     setClients(Array.isArray(data) ? data : []);
   }
 
-  async function loadSenders() {
-    const res = await fetch("/api/infobip-senders");
-    if (!res.ok) return;
-
-    const data = await res.json();
-    setSenders(Array.isArray(data?.senders) ? data.senders : []);
-  }
-
   useEffect(() => {
     loadUser();
     loadClients();
-    loadSenders();
   }, []);
 
   useEffect(() => {
@@ -203,30 +151,10 @@ export default function DashboardPage() {
   useEffect(() => {
     if (user === undefined) return;
 
-    const handleFocus = () => load();
-    const handleVisibility = () => {
-      if (!document.hidden) load();
-    };
-
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, user]);
-
-  useEffect(() => {
-    if (user === undefined) return;
-
     const events = new EventSource("/api/realtime");
 
     events.onmessage = () => {
       load();
-      loadClients();
-      loadSenders();
     };
 
     return () => {
@@ -239,7 +167,7 @@ export default function DashboardPage() {
     {
       title: "Total monitorado",
       value: data?.total || 0,
-      helper: "Mensagens no período",
+      helper: "Mensagens enviadas",
       icon: <Send />,
       color: "#2563eb",
       bg: "linear-gradient(135deg,#ffffff,#eff6ff)",
@@ -363,31 +291,6 @@ export default function DashboardPage() {
                   Exportar CSV
                 </Button>
               </Stack>
-            </Stack>
-
-            <Stack
-              direction={{ xs: "column", md: "row" }}
-              spacing={1.5}
-              sx={{ mb: 2 }}
-            >
-              <Chip
-                label={`Último webhook: ${formatDateTime(data?.lastWebhookAt)}`}
-                sx={{
-                  bgcolor: "#fff",
-                  border: "1px solid #dbeafe",
-                  color: "#1d4ed8",
-                  fontWeight: 800,
-                }}
-              />
-              <Chip
-                label={`Última mensagem: ${formatDateTime(data?.lastMessage?.createdAt)}`}
-                sx={{
-                  bgcolor: "#fff",
-                  border: "1px solid #dcfce7",
-                  color: "#15803d",
-                  fontWeight: 800,
-                }}
-              />
             </Stack>
 
             <Card sx={{ p: 2.5, mb: 3 }}>

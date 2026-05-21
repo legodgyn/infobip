@@ -29,7 +29,7 @@ const menu = [
   { label: "Relatórios", href: "/reports", icon: <BarChart />, adminOnly: false },
   { label: "Conversas", href: "/conversations", icon: <Forum />, adminOnly: false },
   { label: "Clientes", href: "/clients", icon: <Groups />, adminOnly: true },
-  { label: "Configurações", href: "/settings", icon: <Settings />, adminOnly: false },
+  { label: "Configurações", href: "/settings", icon: <Settings />, adminOnly: true },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
