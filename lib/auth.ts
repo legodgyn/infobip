@@ -1,6 +1,6 @@
+import { prisma } from "@/lib/prisma";
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
-import { prisma } from "@/lib/prisma";
 
 const JWT_SECRET = process.env.JWT_SECRET || "troque_essa_chave";
 
@@ -34,18 +34,20 @@ export async function getCurrentUser() {
 
   if (!payload?.id) return null;
 
-  const user = await prisma.user.findUnique({
-    where: { id: payload.id },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      clientId: true,
-    },
-  });
+  const users = await prisma.$queryRaw<
+    Array<{
+      id: string;
+      name: string;
+      email: string;
+      role: "admin" | "client";
+      clientId: string | null;
+    }>
+  >`
+    SELECT "id", "name", "email", "role"::text AS "role", "clientId"
+    FROM "User"
+    WHERE "id" = ${payload.id}
+    LIMIT 1
+  `;
 
-  if (!user) return null;
-
-  return user;
+  return users[0] || null;
 }
