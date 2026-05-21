@@ -1,5 +1,4 @@
 import { importInfobipSendersToClient } from "@/lib/infobip-config";
-import { notifyRealtime } from "@/lib/realtime";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -11,8 +10,6 @@ export async function POST(req: Request) {
       body?.clientId || null,
       Array.isArray(body?.numbers) ? body.numbers : undefined
     );
-    notifyRealtime();
-
     return NextResponse.json(result);
   } catch (error: any) {
     return NextResponse.json(

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { notifyRealtime } from "@/lib/realtime";
 
 function normalizePhone(value?: string | null) {
   return String(value || "").replace(/\D/g, "");
@@ -240,7 +239,6 @@ export async function POST(req: Request) {
         },
       });
     }
-    notifyRealtime();
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("ERRO WEBHOOK INFOBIP:", error);
