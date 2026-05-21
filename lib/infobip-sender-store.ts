@@ -20,6 +20,21 @@ export async function ensureInfobipSenderTable() {
       "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT now()
     )
   `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "InfobipSender"
+    ADD COLUMN IF NOT EXISTS "id" TEXT,
+    ADD COLUMN IF NOT EXISTS "displayName" TEXT,
+    ADD COLUMN IF NOT EXISTS "status" TEXT,
+    ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) NOT NULL DEFAULT now(),
+    ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT now()
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE "InfobipSender"
+    SET "id" = 'is_' || replace(gen_random_uuid()::text, '-', '')
+    WHERE "id" IS NULL OR "id" = ''
+  `);
 }
 
 export async function upsertInfobipSenders(senders: InfobipSender[]) {
@@ -27,20 +42,26 @@ export async function upsertInfobipSenders(senders: InfobipSender[]) {
 
   for (const sender of senders) {
     await prisma.$executeRaw`
+      UPDATE "InfobipSender"
+      SET
+        "displayName" = ${sender.displayName},
+        "status" = ${sender.status},
+        "updatedAt" = now()
+      WHERE "sender" = ${sender.sender}
+    `;
+
+    await prisma.$executeRaw`
       INSERT INTO "InfobipSender" ("id", "sender", "displayName", "status", "createdAt", "updatedAt")
-      VALUES (
+      SELECT
         'is_' || replace(gen_random_uuid()::text, '-', ''),
         ${sender.sender},
         ${sender.displayName},
         ${sender.status},
         now(),
         now()
+      WHERE NOT EXISTS (
+        SELECT 1 FROM "InfobipSender" WHERE "sender" = ${sender.sender}
       )
-      ON CONFLICT ("sender")
-      DO UPDATE SET
-        "displayName" = EXCLUDED."displayName",
-        "status" = EXCLUDED."status",
-        "updatedAt" = now()
     `;
   }
 }
