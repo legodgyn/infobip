@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 function normalizePhone(value?: string | null) {
   return String(value || "").replace(/\D/g, "");
 }
@@ -77,8 +80,12 @@ function getTo(item: any) {
 }
 
 function isInboundMessage(item: any, status: any, text: any) {
-  const direction = String(item?.direction || item?.message?.direction || "").toLowerCase();
-  const event = String(item?.event || item?.type || item?.message?.type || "").toLowerCase();
+  const direction = String(
+    item?.direction || item?.message?.direction || ""
+  ).toLowerCase();
+  const event = String(
+    item?.event || item?.type || item?.message?.type || ""
+  ).toLowerCase();
 
   return (
     direction === "inbound" ||
@@ -91,21 +98,50 @@ function isInboundMessage(item: any, status: any, text: any) {
   );
 }
 
+async function getWebhookSetting(key: string) {
+  try {
+    const setting = await prisma.appSetting.findUnique({ where: { key } });
+    return setting?.value || null;
+  } catch {
+    return null;
+  }
+}
+
+async function setWebhookSetting(key: string, value: any) {
+  try {
+    await prisma.appSetting.upsert({
+      where: { key },
+      create: {
+        key,
+        value: typeof value === "string" ? value : JSON.stringify(value),
+      },
+      update: {
+        value: typeof value === "string" ? value : JSON.stringify(value),
+      },
+    });
+  } catch (error) {
+    console.error("ERRO AO REGISTRAR STATUS DO WEBHOOK:", error);
+  }
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
+  const lastHit = await getWebhookSetting("infobip.webhook.lastHit");
+  const lastSummary = await getWebhookSetting("infobip.webhook.lastSummary");
 
   return NextResponse.json({
     ok: true,
-    message: "Webhook Infobip ativo. Configure esta URL pública na Infobip para receber mensagens.",
+    message: "Webhook Infobip ativo. Configure esta URL publica na Infobip para receber mensagens.",
     endpoint: `${url.origin}${url.pathname}`,
     method: "POST",
+    lastHit,
+    lastSummary: lastSummary ? JSON.parse(lastSummary) : null,
   });
 }
 
 async function findClientIdByNumber(from?: string | null, to?: string | null) {
   const fromClean = normalizePhone(from);
   const toClean = normalizePhone(to);
-
   const numbers = [fromClean, toClean].filter(Boolean);
 
   if (!numbers.length) return null;
@@ -136,17 +172,28 @@ async function findClientIdByNumber(from?: string | null, to?: string | null) {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const rawBody = await req.text();
+    const body = rawBody ? JSON.parse(rawBody) : {};
 
     console.log("INFOBIP WEBHOOK RECEBIDO:", JSON.stringify(body, null, 2));
 
     const items = Array.isArray(body?.results)
       ? body.results
       : Array.isArray(body?.messages)
-      ? body.messages
-      : Array.isArray(body)
-      ? body
-      : [body];
+        ? body.messages
+        : Array.isArray(body)
+          ? body
+          : [body];
+
+    await setWebhookSetting("infobip.webhook.lastHit", new Date().toISOString());
+    await setWebhookSetting("infobip.webhook.lastSummary", {
+      items: items.length,
+      firstMessageId: getMessageId(items[0]),
+      firstFrom: getFrom(items[0]),
+      firstTo: getTo(items[0]),
+      firstStatus: getStatus(items[0]),
+      hasText: Boolean(getText(items[0])),
+    });
 
     for (const item of items) {
       const infobipMsgId = getMessageId(item);
@@ -154,13 +201,9 @@ export async function POST(req: Request) {
       const from = getFrom(item);
       const to = getTo(item);
       const text = getText(item);
-
       const isInbound = isInboundMessage(item, status, text);
-
       const direction = isInbound ? "inbound" : "outbound";
-
       const clientId = await findClientIdByNumber(from, to);
-
       const now = new Date();
 
       const existing = infobipMsgId
@@ -239,6 +282,7 @@ export async function POST(req: Request) {
         },
       });
     }
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("ERRO WEBHOOK INFOBIP:", error);
