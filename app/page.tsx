@@ -133,8 +133,8 @@ export default function DashboardPage() {
 
     try {
       const [dashboardRes, chartsRes] = await Promise.all([
-        fetch(`/api/dashboard?${query}`),
-        fetch(`/api/charts?${query}`),
+        fetch(`/api/dashboard?${query}`, { cache: "no-store" }),
+        fetch(`/api/charts?${query}`, { cache: "no-store" }),
       ]);
 
       const dashboard = await dashboardRes.json();
