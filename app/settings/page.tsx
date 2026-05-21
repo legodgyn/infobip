@@ -89,7 +89,7 @@ export default function SettingsPage() {
   async function loadClients() {
     setLoadingClients(true);
     try {
-      const res = await fetch("/api/clients", { cache: "no-store" });
+      const res = await fetch("/api/settings/clients", { cache: "no-store" });
       const data = await readJsonResponse(res, "Clientes");
 
       if (!res.ok) {
