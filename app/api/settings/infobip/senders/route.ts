@@ -1,4 +1,8 @@
 import { getCurrentUser } from "@/lib/auth";
+import {
+  listStoredInfobipSenders,
+  upsertInfobipSenders,
+} from "@/lib/infobip-sender-store";
 import { fetchInfobipSenders, normalizeSenderNumber } from "@/lib/infobip-senders";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
@@ -40,19 +44,13 @@ function filterSenders(senders: SenderRow[], search: string) {
 }
 
 async function fetchFallbackSenders() {
-  try {
-    const infobipRows = await prisma.$queryRawUnsafe<SenderRow[]>(
-      'SELECT "sender", "displayName", "status" FROM "InfobipSender" ORDER BY "displayName" NULLS LAST, "sender"'
-    );
+  const infobipRows = await listStoredInfobipSenders();
 
-    if (infobipRows.length > 0) {
-      return {
-        source: "InfobipSender",
-        rows: infobipRows,
-      };
-    }
-  } catch {
-    // The restored project does not require the old InfobipSender table.
+  if (infobipRows.length > 0) {
+    return {
+      source: "InfobipSender",
+      rows: infobipRows,
+    };
   }
 
   const linkedRows = await prisma.clientNumber.findMany({
@@ -80,9 +78,26 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const search = (searchParams.get("search") || "").trim().toLowerCase();
+  const refresh = searchParams.get("refresh") === "1";
 
   try {
-    const senders = await fetchInfobipSenders();
+    if (!refresh) {
+      const fallback = await fetchFallbackSenders();
+      const fallbackSenders = filterSenders(fallback.rows, search);
+
+      if (fallbackSenders.length > 0) {
+        return NextResponse.json({
+          ok: true,
+          total: fallback.rows.length,
+          senders: fallbackSenders,
+          source: fallback.source,
+        });
+      }
+    }
+
+    const senders = await fetchInfobipSenders({ timeoutMs: 55000 });
+    await upsertInfobipSenders(senders);
+
     const filtered = filterSenders(senders, search);
 
     return NextResponse.json({

@@ -112,14 +112,19 @@ export default function SettingsPage() {
     }
   }
 
-  async function loadSenders() {
+  async function loadSenders(refresh = false) {
     setLoadingSenders(true);
     setMessage(null);
 
     try {
-      const res = await fetch("/api/settings/infobip/senders", {
-        cache: "no-store",
-      });
+      const res = await fetch(
+        refresh
+          ? "/api/settings/infobip/senders?refresh=1"
+          : "/api/settings/infobip/senders",
+        {
+          cache: "no-store",
+        }
+      );
       const data = await readJsonResponse(res, "Numeros Infobip");
 
       if (!res.ok) {
@@ -145,7 +150,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadClients();
-    loadSenders();
+    loadSenders(false);
   }, []);
 
   const currentClient = clients.find((client) => client.id === clientId);
@@ -269,7 +274,7 @@ export default function SettingsPage() {
               <Button
                 variant="outlined"
                 startIcon={loadingSenders ? <CircularProgress size={18} /> : <CloudSync />}
-                onClick={loadSenders}
+                onClick={() => loadSenders(true)}
                 disabled={loadingSenders}
                 sx={{ height: 44 }}
               >

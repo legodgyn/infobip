@@ -79,12 +79,17 @@ export function extractInfobipSenders(payload: unknown): InfobipSender[] {
     .filter((sender): sender is InfobipSender => Boolean(sender));
 }
 
-export async function fetchInfobipSenders() {
+export async function fetchInfobipSenders(options?: { timeoutMs?: number }) {
   const config = getInfobipEnvConfig();
 
   if (!config.configured) {
     throw new Error("Configure INFOBIP_BASE_URL e INFOBIP_API_KEY no .env.");
   }
+
+  const signal =
+    typeof options?.timeoutMs === "number"
+      ? AbortSignal.timeout(options.timeoutMs)
+      : undefined;
 
   const res = await fetch(`${config.baseUrl}/whatsapp/1/senders`, {
     method: "GET",
@@ -93,6 +98,7 @@ export async function fetchInfobipSenders() {
       Accept: "application/json",
     },
     cache: "no-store",
+    signal,
   });
 
   const text = await res.text();
