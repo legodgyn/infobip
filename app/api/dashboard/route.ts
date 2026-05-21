@@ -34,7 +34,20 @@ export async function GET(req: Request) {
   const clientId =
     user.role === "admin" ? clientIdParam : user.clientId || undefined;
 
-  const baseWhere: any = buildMessageWhere({ clientId, number, start, end });
+  const clientNumbers = clientId
+    ? await prisma.clientNumber.findMany({
+        where: { clientId },
+        select: { number: true },
+      })
+    : [];
+
+  const baseWhere: any = buildMessageWhere({
+    clientId,
+    number,
+    numbers: clientNumbers.map((item) => item.number),
+    start,
+    end,
+  });
 
   const total = await prisma.message.count({
     where: { ...baseWhere, direction: "outbound" },

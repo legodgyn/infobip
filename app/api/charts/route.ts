@@ -25,8 +25,21 @@ export async function GET(req: Request) {
   const clientId =
     user.role === "admin" ? clientIdParam : user.clientId || undefined;
 
+  const clientNumbers = clientId
+    ? await prisma.clientNumber.findMany({
+        where: { clientId },
+        select: { number: true },
+      })
+    : [];
+
   const messages = await prisma.message.findMany({
-    where: buildMessageWhere({ clientId, number, start, end }),
+    where: buildMessageWhere({
+      clientId,
+      number,
+      numbers: clientNumbers.map((item) => item.number),
+      start,
+      end,
+    }),
     orderBy: { createdAt: "asc" },
   });
 

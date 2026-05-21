@@ -22,27 +22,6 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const where =
-    user.role === "admin"
-      ? {}
-      : {
-          clientId: user.clientId || "__NO_CLIENT__",
-        };
-
-  const messages = await prisma.message.findMany({
-    where,
-    include: {
-      client: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 500,
-  });
-
   const clientNumbers = await prisma.clientNumber.findMany({
     where:
       user.role === "admin"
@@ -58,6 +37,39 @@ export async function GET() {
         },
       },
     },
+  });
+
+  const userNumbers = clientNumbers
+    .map((item) => normalizePhone(item.number))
+    .filter(Boolean);
+
+  const numberMatches = userNumbers.flatMap((number) => [
+    { from: { contains: number } },
+    { to: { contains: number } },
+  ]);
+
+  const where =
+    user.role === "admin"
+      ? {}
+      : {
+          OR: [
+            { clientId: user.clientId || "__NO_CLIENT__" },
+            ...numberMatches,
+          ],
+        };
+
+  const messages = await prisma.message.findMany({
+    where,
+    include: {
+      client: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 500,
   });
 
   const conversationsMap = new Map<string, any>();

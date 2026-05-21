@@ -5,11 +5,13 @@ export function cleanPhone(value?: string | null) {
 export function buildMessageWhere(input: {
   clientId?: string;
   number?: string;
+  numbers?: string[];
   start?: string | null;
   end?: string | null;
   status?: string;
 }): any {
   const number = cleanPhone(input.number);
+  const numbers = (input.numbers || []).map(cleanPhone).filter(Boolean);
 
   const dateWhere =
     input.start || input.end
@@ -28,28 +30,25 @@ export function buildMessageWhere(input: {
         }
       : {};
 
-  const numberWhere = number
-    ? {
-        OR: [{ from: { contains: number } }, { to: { contains: number } }],
-      }
+  const phoneWhere = (value: string) => ({
+    OR: [{ from: { contains: value } }, { to: { contains: value } }],
+  });
+
+  const selectedNumberWhere = number ? phoneWhere(number) : {};
+  const importedNumbersWhere = numbers.length
+    ? { OR: numbers.flatMap((value) => phoneWhere(value).OR) }
     : {};
 
-  if (input.clientId && number) {
-    return {
-      AND: [
-        dateWhere,
-        statusWhere,
-        {
-          OR: [{ clientId: input.clientId }, numberWhere],
-        },
-      ],
-    };
-  }
+  const scopeWhere =
+    input.clientId && numbers.length
+      ? { OR: [{ clientId: input.clientId }, importedNumbersWhere] }
+      : input.clientId
+        ? { clientId: input.clientId }
+        : importedNumbersWhere;
 
-  return {
-    ...(input.clientId && { clientId: input.clientId }),
-    ...dateWhere,
-    ...statusWhere,
-    ...numberWhere,
-  };
+  const filters = [dateWhere, statusWhere, scopeWhere, selectedNumberWhere].filter(
+    (item) => Object.keys(item).length > 0
+  );
+
+  return filters.length ? { AND: filters } : {};
 }
