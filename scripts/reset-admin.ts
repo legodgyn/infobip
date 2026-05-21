@@ -12,32 +12,37 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
   const email = "admin@admin.com";
   const password = "123456";
-
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  await prisma.user.deleteMany({
-    where: { email },
-  });
+  const users = await prisma.$queryRaw<
+    Array<{ id: string; email: string; role: string }>
+  >`
+    INSERT INTO "User" ("id", "name", "email", "password", "role", "createdAt")
+    VALUES (
+      'usr_' || replace(gen_random_uuid()::text, '-', ''),
+      'Admin',
+      ${email},
+      ${hashedPassword},
+      'admin',
+      now()
+    )
+    ON CONFLICT ("email")
+    DO UPDATE SET
+      "name" = EXCLUDED."name",
+      "password" = EXCLUDED."password",
+      "role" = EXCLUDED."role",
+      "clientId" = NULL
+    RETURNING "id", "email", "role"::text AS "role"
+  `;
 
-  const user = await prisma.user.create({
-    data: {
-      name: "Admin",
-      email,
-      password: hashedPassword,
-      role: "admin",
-    },
-  });
-
-  console.log("Admin resetado:");
+  console.log("Admin pronto:");
   console.log({
-    id: user.id,
+    id: users[0]?.id,
     email,
     password,
-    hash: hashedPassword,
+    role: users[0]?.role,
+    bcryptOk: await bcrypt.compare(password, hashedPassword),
   });
-
-  const test = await bcrypt.compare(password, hashedPassword);
-  console.log("Teste bcrypt:", test);
 }
 
 main()
