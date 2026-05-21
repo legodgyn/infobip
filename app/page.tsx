@@ -59,6 +59,15 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("pt-BR").format(value || 0);
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) return "Sem registro";
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "medium",
+  }).format(new Date(value));
+}
+
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(undefined);
   const [data, setData] = useState<any>(null);
@@ -194,6 +203,24 @@ export default function DashboardPage() {
   useEffect(() => {
     if (user === undefined) return;
 
+    const handleFocus = () => load();
+    const handleVisibility = () => {
+      if (!document.hidden) load();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, user]);
+
+  useEffect(() => {
+    if (user === undefined) return;
+
     const events = new EventSource("/api/realtime");
 
     events.onmessage = () => {
@@ -212,7 +239,7 @@ export default function DashboardPage() {
     {
       title: "Total monitorado",
       value: data?.total || 0,
-      helper: "Mensagens enviadas",
+      helper: "Mensagens no período",
       icon: <Send />,
       color: "#2563eb",
       bg: "linear-gradient(135deg,#ffffff,#eff6ff)",
@@ -336,6 +363,31 @@ export default function DashboardPage() {
                   Exportar CSV
                 </Button>
               </Stack>
+            </Stack>
+
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              spacing={1.5}
+              sx={{ mb: 2 }}
+            >
+              <Chip
+                label={`Último webhook: ${formatDateTime(data?.lastWebhookAt)}`}
+                sx={{
+                  bgcolor: "#fff",
+                  border: "1px solid #dbeafe",
+                  color: "#1d4ed8",
+                  fontWeight: 800,
+                }}
+              />
+              <Chip
+                label={`Última mensagem: ${formatDateTime(data?.lastMessage?.createdAt)}`}
+                sx={{
+                  bgcolor: "#fff",
+                  border: "1px solid #dcfce7",
+                  color: "#15803d",
+                  fontWeight: 800,
+                }}
+              />
             </Stack>
 
             <Card sx={{ p: 2.5, mb: 3 }}>

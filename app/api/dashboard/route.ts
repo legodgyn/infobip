@@ -49,8 +49,12 @@ export async function GET(req: Request) {
     end,
   });
 
-  const total = await prisma.message.count({
+  const outbound = await prisma.message.count({
     where: { ...baseWhere, direction: "outbound" },
+  });
+
+  const inbound = await prisma.message.count({
+    where: { ...baseWhere, direction: "inbound" },
   });
 
   const delivered = await prisma.message.count({
@@ -65,19 +69,41 @@ export async function GET(req: Request) {
     where: { ...baseWhere, direction: "outbound", failedAt: { not: null } },
   });
 
-  const inbound = await prisma.message.count({
-    where: { ...baseWhere, direction: "inbound" },
+  const lastMessage = await prisma.message.findFirst({
+    where: baseWhere,
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      direction: true,
+      from: true,
+      to: true,
+      text: true,
+      status: true,
+      createdAt: true,
+      receivedAt: true,
+      sentAt: true,
+    },
   });
+
+  const lastWebhookHit = await prisma.appSetting.findUnique({
+    where: { key: "infobip.webhook.lastHit" },
+    select: { value: true },
+  });
+
+  const total = outbound + inbound;
 
   return NextResponse.json({
     total,
+    outbound,
     delivered,
     seen,
     failed,
     inbound,
-    deliveryRate: total ? Number(((delivered / total) * 100).toFixed(1)) : 0,
-    seenRate: total ? Number(((seen / total) * 100).toFixed(1)) : 0,
-    failureRate: total ? Number(((failed / total) * 100).toFixed(1)) : 0,
+    lastMessage,
+    lastWebhookAt: lastWebhookHit?.value || null,
+    deliveryRate: outbound ? Number(((delivered / outbound) * 100).toFixed(1)) : 0,
+    seenRate: outbound ? Number(((seen / outbound) * 100).toFixed(1)) : 0,
+    failureRate: outbound ? Number(((failed / outbound) * 100).toFixed(1)) : 0,
     responseRate: total ? Number(((inbound / total) * 100).toFixed(1)) : 0,
   });
 }
