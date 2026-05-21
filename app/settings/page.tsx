@@ -60,6 +60,19 @@ function formatPhone(value: string) {
   return clean || "-";
 }
 
+async function readJsonResponse(res: Response, label: string) {
+  const text = await res.text();
+
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    const excerpt = text.replace(/\s+/g, " ").slice(0, 120);
+    throw new Error(
+      `${label} respondeu texto/HTML em vez de JSON (HTTP ${res.status}). Trecho: ${excerpt}`
+    );
+  }
+}
+
 export default function SettingsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [clientId, setClientId] = useState("");
@@ -77,10 +90,23 @@ export default function SettingsPage() {
     setLoadingClients(true);
     try {
       const res = await fetch("/api/clients", { cache: "no-store" });
-      const data = await res.json();
+      const data = await readJsonResponse(res, "Clientes");
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Nao foi possivel carregar os clientes.");
+      }
+
       const list = Array.isArray(data) ? data : [];
       setClients(list);
       setClientId((current) => current || list[0]?.id || "");
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Nao foi possivel carregar os clientes.",
+      });
     } finally {
       setLoadingClients(false);
     }
@@ -94,13 +120,16 @@ export default function SettingsPage() {
       const res = await fetch("/api/settings/infobip/senders", {
         cache: "no-store",
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res, "Numeros Infobip");
 
       if (!res.ok) {
         throw new Error(data?.error || "Nao foi possivel buscar os numeros.");
       }
 
       setSenders(Array.isArray(data.senders) ? data.senders : []);
+      if (data.warning) {
+        setMessage({ type: "error", text: data.warning });
+      }
     } catch (error) {
       setMessage({
         type: "error",
@@ -177,7 +206,7 @@ export default function SettingsPage() {
           numbers: selectedSenders,
         }),
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res, "Vinculo de numeros");
 
       if (!res.ok) {
         throw new Error(data?.error || "Nao foi possivel vincular os numeros.");
