@@ -275,6 +275,11 @@ async function saveMessage(item: any, body: any) {
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  const forwardedProto = req.headers.get("x-forwarded-proto");
+  const host = forwardedHost || req.headers.get("host") || url.host;
+  const proto = forwardedProto || url.protocol.replace(":", "") || "https";
+
   const rows = await prisma.$queryRawUnsafe<
     Array<{
       messagesTotal: bigint | number | string;
@@ -291,7 +296,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     ok: true,
     message: "Webhook Infobip ativo. Configure esta URL publica na Infobip para receber mensagens.",
-    endpoint: `${url.origin}/api/webhooks/infobip`,
+    endpoint: `${proto}://${host}/api/webhooks/infobip`,
     method: "POST",
     messagesTotal: Number(rows[0]?.messagesTotal || 0),
     eventsTotal: Number(rows[0]?.eventsTotal || 0),
