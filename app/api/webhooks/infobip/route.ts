@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { notifyRealtime } from "@/lib/realtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -126,13 +127,17 @@ async function setWebhookSetting(key: string, value: any) {
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  const forwardedProto = req.headers.get("x-forwarded-proto");
+  const host = forwardedHost || req.headers.get("host");
+  const origin = host ? `${forwardedProto || url.protocol.replace(":", "")}://${host}` : url.origin;
   const lastHit = await getWebhookSetting("infobip.webhook.lastHit");
   const lastSummary = await getWebhookSetting("infobip.webhook.lastSummary");
 
   return NextResponse.json({
     ok: true,
     message: "Webhook Infobip ativo. Configure esta URL publica na Infobip para receber mensagens.",
-    endpoint: `${url.origin}${url.pathname}`,
+    endpoint: `${origin}${url.pathname}`,
     method: "POST",
     lastHit,
     lastSummary: lastSummary ? JSON.parse(lastSummary) : null,
@@ -282,6 +287,8 @@ export async function POST(req: Request) {
         },
       });
     }
+
+    notifyRealtime();
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
