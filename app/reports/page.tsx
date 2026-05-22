@@ -14,6 +14,7 @@ import {
   Stack,
   TextField,
   ThemeProvider,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import {
@@ -121,6 +122,28 @@ function formatPhone(phone?: string) {
   return phone;
 }
 
+function TruncatedText({ value }: { value?: string | null }) {
+  const text = value || "-";
+
+  return (
+    <Tooltip title={text} disableHoverListener={text.length < 42}>
+      <Typography
+        component="span"
+        sx={{
+          display: "block",
+          maxWidth: "100%",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          fontSize: 14,
+        }}
+      >
+        {text}
+      </Typography>
+    </Tooltip>
+  );
+}
+
 function buildQuery(filters: any) {
   const params = new URLSearchParams();
 
@@ -145,9 +168,12 @@ function CustomToolbar({
   return (
     <GridToolbarContainer
       sx={{
-        p: 2,
+        px: 2,
+        py: 1.5,
         display: "flex",
         justifyContent: "space-between",
+        alignItems: "center",
+        gap: 2,
         borderBottom: "1px solid #eef2f6",
       }}
     >
@@ -157,11 +183,11 @@ function CustomToolbar({
       </Stack>
 
       <Stack direction="row" spacing={1}>
-        <Button startIcon={<Refresh />} onClick={onRefresh}>
+        <Button size="small" startIcon={<Refresh />} onClick={onRefresh}>
           Atualizar
         </Button>
 
-        <Button variant="contained" startIcon={<Download />} href={exportUrl}>
+        <Button size="small" variant="contained" startIcon={<Download />} href={exportUrl}>
           Exportar XLSX
         </Button>
       </Stack>
@@ -246,13 +272,15 @@ export default function ReportsPage() {
     {
       field: "client",
       headerName: "Cliente",
-      width: 180,
+      minWidth: 130,
+      flex: 0.8,
       valueGetter: (_value, row: any) => row.client?.name || "Sem cliente",
+      renderCell: (params) => <TruncatedText value={params.value} />,
     },
     {
       field: "direction",
       headerName: "Direção",
-      width: 120,
+      width: 116,
       renderCell: (params) => (
         <Chip
           size="small"
@@ -265,40 +293,45 @@ export default function ReportsPage() {
     {
       field: "from",
       headerName: "De",
-      width: 180,
+      minWidth: 140,
+      flex: 0.75,
       valueFormatter: (value) => formatPhone(String(value || "")),
     },
     {
       field: "to",
       headerName: "Para",
-      width: 180,
+      minWidth: 140,
+      flex: 0.75,
       valueFormatter: (value) => formatPhone(String(value || "")),
     },
     {
       field: "status",
       headerName: "Status",
-      width: 160,
+      width: 132,
       renderCell: (params) => statusChip(params.row),
     },
     {
       field: "text",
       headerName: "Mensagem",
-      flex: 1,
-      minWidth: 260,
+      flex: 1.4,
+      minWidth: 220,
       valueGetter: (_value, row: any) => row.text || "-",
+      renderCell: (params) => <TruncatedText value={params.value} />,
     },
     {
       field: "createdAt",
       headerName: "Data",
-      width: 180,
+      width: 158,
       valueFormatter: (value) =>
         value ? new Date(String(value)).toLocaleString("pt-BR") : "-",
     },
     {
       field: "failureReason",
       headerName: "Motivo da falha",
-      width: 220,
+      minWidth: 180,
+      flex: 1,
       valueGetter: (_value, row: any) => row.failureReason || "-",
+      renderCell: (params) => <TruncatedText value={params.value} />,
     },
   ];
 
@@ -330,11 +363,14 @@ export default function ReportsPage() {
           sx={{
             p: 3,
             minHeight: "100vh",
+            width: "100%",
+            maxWidth: "100%",
+            overflowX: "hidden",
             background:
               "radial-gradient(circle at 12% 0%, rgba(37,99,235,.10), transparent 30%), radial-gradient(circle at 90% 0%, rgba(124,58,237,.10), transparent 30%), #f8fafc",
           }}
         >
-          <Box sx={{ width: "100%", maxWidth: "1680px", mx: "auto" }}>
+          <Box sx={{ width: "100%", maxWidth: "100%", mx: "auto", minWidth: 0 }}>
             <Stack
               direction={{ xs: "column", md: "row" }}
               sx={{
@@ -384,11 +420,12 @@ export default function ReportsPage() {
                 <Card
                   key={item.label}
                   sx={{
-                    p: 2.2,
-                    borderRadius: 4,
+                    p: 2,
+                    borderRadius: 3,
                     border: "1px solid #eef2f6",
                     boxShadow: "0 18px 45px rgba(15,23,42,.06)",
                     background: "#fff",
+                    minWidth: 0,
                   }}
                 >
                  <Typography color="text.secondary" sx={{ fontSize: 13 }}>
@@ -412,9 +449,9 @@ export default function ReportsPage() {
 
             <Card
               sx={{
-                p: 3,
+                p: { xs: 2, lg: 2.5 },
                 mb: 3,
-                borderRadius: 4,
+                borderRadius: 3,
                 border: "1px solid #e2e8f0",
                 boxShadow: "0 20px 50px rgba(15,23,42,.05)",
                 background: "linear-gradient(135deg,#ffffff,#f8fafc)",
@@ -436,7 +473,8 @@ export default function ReportsPage() {
                     display: "grid",
                     gridTemplateColumns: {
                       xs: "1fr",
-                      md: "1.2fr 1fr 1fr 1fr auto",
+                      md: "repeat(2, minmax(0, 1fr))",
+                      xl: "minmax(220px, 1.1fr) minmax(180px, .9fr) minmax(180px, .9fr) minmax(180px, .9fr) auto",
                     },
                     gap: 2,
                     alignItems: "end",
@@ -569,11 +607,15 @@ export default function ReportsPage() {
 
             <Card
               sx={{
-                height: 650,
+                height: "min(650px, calc(100vh - 360px))",
+                minHeight: 520,
+                width: "100%",
+                maxWidth: "100%",
                 overflow: "hidden",
-                borderRadius: 4,
+                borderRadius: 3,
                 border: "1px solid #e2e8f0",
                 boxShadow: "0 20px 50px rgba(15,23,42,.05)",
+                minWidth: 0,
               }}
             >
               <DataGrid
@@ -597,12 +639,23 @@ export default function ReportsPage() {
                 }}
                 sx={{
                   border: "none",
+                  width: "100%",
+                  minWidth: 0,
                   "& .MuiDataGrid-columnHeaders": {
                     bgcolor: "#f8fafc",
                     fontWeight: 900,
                   },
                   "& .MuiDataGrid-cell": {
                     borderColor: "#eef2f6",
+                    minWidth: 0,
+                    alignItems: "center",
+                  },
+                  "& .MuiDataGrid-columnHeaderTitle": {
+                    fontWeight: 900,
+                    overflow: "visible",
+                  },
+                  "& .MuiDataGrid-virtualScroller": {
+                    overflowX: "auto",
                   },
                 }}
               />
