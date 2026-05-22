@@ -154,6 +154,18 @@ export default function SettingsPage() {
   }, []);
 
   const currentClient = clients.find((client) => client.id === clientId);
+  const numberOwnerByNumber = useMemo(() => {
+    const map = new Map<string, Client>();
+
+    for (const client of clients) {
+      for (const item of client.numbers || []) {
+        map.set(item.number, client);
+      }
+    }
+
+    return map;
+  }, [clients]);
+
   const linkedNumbers = useMemo(() => {
     return new Set((currentClient?.numbers || []).map((item) => item.number));
   }, [currentClient]);
@@ -295,24 +307,40 @@ export default function SettingsPage() {
                 <Box
                   sx={{
                     display: "grid",
-                    gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" },
+                    gridTemplateColumns: { xs: "1fr", lg: "minmax(280px, .9fr) 1fr" },
                     gap: 2,
                   }}
                 >
-                  <FormControl fullWidth>
-                    <InputLabel>Cliente</InputLabel>
-                    <Select
-                      label="Cliente"
-                      value={clientId}
-                      onChange={(event) => setClientId(String(event.target.value))}
-                    >
-                      {clients.map((client) => (
-                        <MenuItem key={client.id} value={client.id}>
-                          {client.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
+                  <Box
+                    sx={{
+                      p: 2,
+                      border: "1px solid #bfdbfe",
+                      borderRadius: 3,
+                      bgcolor: "#eff6ff",
+                    }}
+                  >
+                    <Typography sx={{ fontSize: 13, fontWeight: 900, color: "#1d4ed8", mb: 1 }}>
+                      1. Cliente que vai receber os numeros
+                    </Typography>
+
+                    <FormControl fullWidth>
+                      <InputLabel>Cliente de destino</InputLabel>
+                      <Select
+                        label="Cliente de destino"
+                        value={clientId}
+                        onChange={(event) => {
+                          setClientId(String(event.target.value));
+                          setSelected([]);
+                        }}
+                      >
+                        {clients.map((client) => (
+                          <MenuItem key={client.id} value={client.id}>
+                            {client.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
 
                   <TextField
                     label="Filtrar numeros"
@@ -357,6 +385,7 @@ export default function SettingsPage() {
                       <Typography sx={{ fontWeight: 950 }}>Selecionar visiveis</Typography>
                       <Typography color="text.secondary" sx={{ fontSize: 13 }}>
                         {selected.length} selecionado(s) de {senders.length} numero(s)
+                        {currentClient ? ` para ${currentClient.name}` : ""}
                       </Typography>
                     </Box>
                   </Stack>
@@ -389,7 +418,10 @@ export default function SettingsPage() {
                 >
                   {filteredSenders.map((sender) => {
                     const checked = selected.includes(sender.sender);
-                    const linked = linkedNumbers.has(sender.sender);
+                    const linkedToCurrent = linkedNumbers.has(sender.sender);
+                    const linkedClient = numberOwnerByNumber.get(sender.sender);
+                    const linkedToOther =
+                      Boolean(linkedClient) && linkedClient?.id !== currentClient?.id;
 
                     return (
                       <Box
@@ -409,8 +441,21 @@ export default function SettingsPage() {
                         }}
                       >
                         <Checkbox checked={checked} />
-                        <Avatar sx={{ bgcolor: linked ? "#dcfce7" : "#eff6ff", color: linked ? "#16a34a" : "#2563eb" }}>
-                          {linked ? <CheckCircle /> : <Phone />}
+                        <Avatar
+                          sx={{
+                            bgcolor: linkedToCurrent
+                              ? "#dcfce7"
+                              : linkedToOther
+                                ? "#fef3c7"
+                                : "#eff6ff",
+                            color: linkedToCurrent
+                              ? "#16a34a"
+                              : linkedToOther
+                                ? "#b45309"
+                                : "#2563eb",
+                          }}
+                        >
+                          {linkedToCurrent ? <CheckCircle /> : <Phone />}
                         </Avatar>
 
                         <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -422,8 +467,22 @@ export default function SettingsPage() {
                           </Typography>
                         </Box>
 
-                        {linked && (
-                          <Chip size="small" color="success" variant="outlined" label="Ja vinculado" />
+                        {linkedToCurrent && (
+                          <Chip
+                            size="small"
+                            color="success"
+                            variant="outlined"
+                            label="Ja neste cliente"
+                          />
+                        )}
+
+                        {linkedToOther && (
+                          <Chip
+                            size="small"
+                            color="warning"
+                            variant="outlined"
+                            label={`Hoje: ${linkedClient?.name}`}
+                          />
                         )}
                       </Box>
                     );
