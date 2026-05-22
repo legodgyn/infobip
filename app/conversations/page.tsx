@@ -147,6 +147,30 @@ export default function ConversationsPage() {
 
   const lastMessage = messages[messages.length - 1];
 
+  const lastInboundMessage = useMemo(
+    () =>
+      [...messages]
+        .reverse()
+        .find((msg: any) => msg.direction === "inbound"),
+    [messages]
+  );
+
+  const replyWindowExpiresAt = useMemo(() => {
+    if (!lastInboundMessage) return null;
+
+    const baseDate = new Date(
+      lastInboundMessage.receivedAt || lastInboundMessage.createdAt
+    );
+
+    if (Number.isNaN(baseDate.getTime())) return null;
+
+    return new Date(baseDate.getTime() + 24 * 60 * 60 * 1000);
+  }, [lastInboundMessage]);
+
+  const canReply = Boolean(
+    replyWindowExpiresAt && replyWindowExpiresAt.getTime() > Date.now()
+  );
+
   const availableNumbers = useMemo(() => {
     const set = new Set<string>();
 
@@ -182,7 +206,7 @@ export default function ConversationsPage() {
   async function sendMessage() {
     const text = message.trim();
 
-    if (!text || !selected?.contact || sending) return;
+    if (!text || !selected?.contact || sending || !canReply) return;
 
     setSending(true);
     setSendError("");
@@ -669,6 +693,20 @@ export default function ConversationsPage() {
                 </Alert>
               )}
 
+              {selected?.contact && !canReply && (
+                <Alert severity="warning" sx={{ mb: 1 }}>
+                  Aguarde o cliente responder para abrir a janela gratuita de
+                  24h antes de enviar mensagem livre.
+                </Alert>
+              )}
+
+              {selected?.contact && canReply && replyWindowExpiresAt && (
+                <Alert severity="success" sx={{ mb: 1 }}>
+                  Janela de 24h aberta ate{" "}
+                  {replyWindowExpiresAt.toLocaleString("pt-BR")}.
+                </Alert>
+              )}
+
               <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                 <IconButton>
                   <Add />
@@ -704,11 +742,13 @@ export default function ConversationsPage() {
                   size="small"
                   placeholder={
                     selected?.contact
-                      ? "Digite uma mensagem..."
+                      ? canReply
+                        ? "Digite uma mensagem..."
+                        : "Aguardando resposta do cliente..."
                       : "Selecione uma conversa..."
                   }
                   value={message}
-                  disabled={!selected?.contact || sending}
+                  disabled={!selected?.contact || sending || !canReply}
                   onChange={(e) => setMessage(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
@@ -724,7 +764,7 @@ export default function ConversationsPage() {
 
                 <IconButton
                   color="primary"
-                  disabled={!message.trim() || !selected?.contact || sending}
+                  disabled={!message.trim() || !selected?.contact || sending || !canReply}
                   onClick={sendMessage}
                   sx={{
                     bgcolor: "#2563eb",

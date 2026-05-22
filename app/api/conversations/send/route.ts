@@ -25,6 +25,24 @@ function getInfobipMessageId(data: any) {
   );
 }
 
+async function hasOpenCustomerCareWindow(from: string, to: string) {
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `
+      SELECT "id"
+      FROM "Message"
+      WHERE lower("direction"::text) = 'inbound'
+        AND regexp_replace("from", '\\D', '', 'g') = $1
+        AND regexp_replace("to", '\\D', '', 'g') = $2
+        AND COALESCE("receivedAt", "createdAt") >= now() - interval '24 hours'
+      LIMIT 1
+    `,
+    to,
+    from
+  );
+
+  return rows.length > 0;
+}
+
 export async function POST(req: Request) {
   const user = await getCurrentUser();
 
@@ -86,6 +104,18 @@ export async function POST(req: Request) {
   }
 
   const from = normalizePhone(selectedNumber.number);
+
+  const canReply = await hasOpenCustomerCareWindow(from, to);
+
+  if (!canReply) {
+    return NextResponse.json(
+      {
+        error:
+          "A janela gratuita de 24h ainda nao esta aberta. Aguarde o cliente responder antes de enviar mensagem livre.",
+      },
+      { status: 403 }
+    );
+  }
 
   const infobipRes = await fetch(
     `${baseUrl.replace(/\/$/, "")}/whatsapp/1/message/text`,
