@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Avatar,
@@ -62,104 +62,49 @@ function normalizePhone(phone?: string) {
   return String(phone || "").replace(/\D/g, "");
 }
 
-type ClientNumber = {
-  id: string;
-  number: string;
-  label?: string | null;
-};
-
-type Client = {
-  id: string;
-  name: string;
-  numbers?: ClientNumber[];
-};
-
 export default function ConversationsPage() {
   const [conversations, setConversations] = useState<any[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [numberFilter, setNumberFilter] = useState("");
   const [selectedContact, setSelectedContact] = useState("");
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
-  const [loadError, setLoadError] = useState("");
   const [sendError, setSendError] = useState("");
   const [selectedFrom, setSelectedFrom] = useState("");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const selectedContactRef = useRef("");
 
-  useEffect(() => {
-    selectedContactRef.current = selectedContact;
-  }, [selectedContact]);
-
-  const load = useCallback(async (keepSelected = true) => {
-    try {
-      const params = new URLSearchParams();
-      if (numberFilter) params.set("number", numberFilter);
-
-      const res = await fetch(`/api/conversations?${params.toString()}`, {
-        cache: "no-store",
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.error || "Falha ao carregar conversas");
-      }
-
-      const list = Array.isArray(data) ? data : [];
-      setLoadError("");
-      setConversations(list);
-
-      if ((!keepSelected || !selectedContactRef.current) && list?.[0]?.contact) {
-        setSelectedContact(list[0].contact);
-        setSelectedFrom(list[0].businessNumber || "");
-      }
-    } catch (err: any) {
-      setLoadError(err?.message || "Falha ao carregar conversas");
-      setConversations([]);
-    }
-  }, [numberFilter]);
-
-  async function loadClients() {
-    const res = await fetch("/api/clients", { cache: "no-store" });
+  async function load(keepSelected = true) {
+    const res = await fetch("/api/conversations", { cache: "no-store" });
     const data = await res.json();
-    setClients(Array.isArray(data) ? data : []);
+
+    const list = Array.isArray(data) ? data : [];
+    setConversations(list);
+
+    if ((!keepSelected || !selectedContact) && list?.[0]?.contact) {
+      setSelectedContact(list[0].contact);
+      setSelectedFrom(list[0].businessNumber || "");
+    }
   }
 
   useEffect(() => {
-    loadClients();
+    load(false);
+
+    const timer = setInterval(() => load(true), 5000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    setSelectedContact("");
-    setSelectedFrom("");
-    load(false);
+    const events = new EventSource("/api/realtime");
 
-    const timer = setInterval(() => load(true), 7000);
-    return () => clearInterval(timer);
-  }, [load]);
+    events.onmessage = () => {
+      load(true);
+    };
 
-  const filterNumbers = useMemo(() => {
-    const map = new Map<string, { number: string; label: string }>();
-
-    for (const client of clients) {
-      for (const item of client.numbers || []) {
-        const number = normalizePhone(item.number);
-        if (!number) continue;
-
-        map.set(number, {
-          number,
-          label: item.label
-            ? `${item.label} • ${formatPhone(number)}`
-            : `${client.name} • ${formatPhone(number)}`,
-        });
-      }
-    }
-
-    return Array.from(map.values()).sort((a, b) =>
-      a.label.localeCompare(b.label, "pt-BR")
-    );
-  }, [clients]);
+    return () => {
+      events.close();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -173,21 +118,14 @@ export default function ConversationsPage() {
     });
   }, [conversations, search]);
 
-  const selected = useMemo(
-    () => conversations.find((c) => c.contact === selectedContact),
-    [conversations, selectedContact]
-  );
+  const selected = conversations.find((c) => c.contact === selectedContact);
 
-  const messages = useMemo(
-    () =>
-      selected?.messages
-        ? [...selected.messages].sort(
-            (a: any, b: any) =>
-              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-          )
-        : [],
-    [selected?.messages]
-  );
+  const messages = selected?.messages
+    ? [...selected.messages].sort(
+        (a: any, b: any) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      )
+    : [];
 
   const lastMessage = messages[messages.length - 1];
 
@@ -210,15 +148,15 @@ export default function ConversationsPage() {
   }, [selected?.businessNumber, messages]);
 
   useEffect(() => {
-    const nextFrom = selected?.businessNumber
-      ? normalizePhone(selected.businessNumber)
-      : availableNumbers[0] || "";
-
-    if (nextFrom && nextFrom !== selectedFrom) {
-      setSelectedFrom(nextFrom);
+    if (selected?.businessNumber) {
+      setSelectedFrom(normalizePhone(selected.businessNumber));
       return;
     }
-  }, [selected?.businessNumber, availableNumbers, selectedFrom]);
+
+    if (availableNumbers[0]) {
+      setSelectedFrom(availableNumbers[0]);
+    }
+  }, [selected?.businessNumber, availableNumbers]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -305,21 +243,6 @@ export default function ConversationsPage() {
                   }}
                 />
 
-                <TextField
-                  select
-                  size="small"
-                  value={numberFilter}
-                  onChange={(e) => setNumberFilter(e.target.value)}
-                  sx={{ minWidth: 170 }}
-                >
-                  <MenuItem value="">Todos</MenuItem>
-                  {filterNumbers.map((item) => (
-                    <MenuItem key={item.number} value={item.number}>
-                      {item.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-
                 <IconButton>
                   <FilterList />
                 </IconButton>
@@ -333,12 +256,6 @@ export default function ConversationsPage() {
             <Divider />
 
             <Box sx={{ px: 2, py: 1.5 }}>
-              {loadError && (
-                <Alert severity="error" sx={{ mb: 1.5 }}>
-                  {loadError}
-                </Alert>
-              )}
-
               <Stack
                 direction="row"
                 sx={{ alignItems: "center", justifyContent: "space-between" }}
