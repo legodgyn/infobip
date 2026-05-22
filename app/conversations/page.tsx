@@ -64,18 +64,18 @@ function normalizePhone(phone?: string) {
 
 export default function ConversationsPage() {
   const [conversations, setConversations] = useState<any[]>([]);
-  const [selectedContact, setSelectedContact] = useState("");
+  const [selectedConversationId, setSelectedConversationId] = useState("");
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [selectedFrom, setSelectedFrom] = useState("");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const selectedContactRef = useRef("");
+  const selectedConversationIdRef = useRef("");
 
   useEffect(() => {
-    selectedContactRef.current = selectedContact;
-  }, [selectedContact]);
+    selectedConversationIdRef.current = selectedConversationId;
+  }, [selectedConversationId]);
 
   const load = useCallback(async (keepSelected = true) => {
     const res = await fetch("/api/conversations", { cache: "no-store" });
@@ -84,8 +84,8 @@ export default function ConversationsPage() {
     const list = Array.isArray(data) ? data : [];
     setConversations(list);
 
-    if ((!keepSelected || !selectedContactRef.current) && list?.[0]?.contact) {
-      setSelectedContact(list[0].contact);
+    if ((!keepSelected || !selectedConversationIdRef.current) && list?.[0]) {
+      setSelectedConversationId(list[0].id || list[0].contact);
       setSelectedFrom(list[0].businessNumber || "");
     }
   }, []);
@@ -111,9 +111,28 @@ export default function ConversationsPage() {
   }, [conversations, search]);
 
   const selected = useMemo(
-    () => conversations.find((c) => c.contact === selectedContact),
-    [conversations, selectedContact]
+    () =>
+      conversations.find(
+        (c) => (c.id || c.contact) === selectedConversationId
+      ),
+    [conversations, selectedConversationId]
   );
+
+  const groupedFiltered = useMemo(() => {
+    const groups = new Map<string, any[]>();
+
+    for (const conv of filtered) {
+      const key = normalizePhone(conv.businessNumber) || "sem-numero";
+      const list = groups.get(key) || [];
+      list.push(conv);
+      groups.set(key, list);
+    }
+
+    return Array.from(groups.entries()).map(([number, rows]) => ({
+      number,
+      rows,
+    }));
+  }, [filtered]);
 
   const messages = useMemo(
     () =>
@@ -158,12 +177,12 @@ export default function ConversationsPage() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [selectedContact, messages.length]);
+  }, [selectedConversationId, messages.length]);
 
   async function sendMessage() {
     const text = message.trim();
 
-    if (!text || !selectedContact || sending) return;
+    if (!text || !selected?.contact || sending) return;
 
     setSending(true);
     setSendError("");
@@ -175,7 +194,7 @@ export default function ConversationsPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          to: selectedContact,
+          to: selected.contact,
           from: selectedFrom || selected?.businessNumber,
           text,
         }),
@@ -272,122 +291,148 @@ export default function ConversationsPage() {
             </Box>
 
             <Box sx={{ overflow: "auto", flex: 1 }}>
-              {filtered.map((conv) => {
-                const active = selectedContact === conv.contact;
-
-                return (
+              {groupedFiltered.map((group) => (
+                <Box key={group.number}>
                   <Box
-                    key={conv.contact}
-                    onClick={() => {
-                      setSelectedContact(conv.contact);
-                      setSelectedFrom(normalizePhone(conv.businessNumber || ""));
-                    }}
                     sx={{
-                      p: 1.7,
-                      cursor: "pointer",
+                      px: 2,
+                      py: 1,
+                      bgcolor: "#f8fafc",
+                      borderTop: "1px solid #eef2f6",
                       borderBottom: "1px solid #eef2f6",
-                      bgcolor: active ? "#eff6ff" : "#fff",
-                      "&:hover": {
-                        bgcolor: active ? "#eff6ff" : "#f8fafc",
-                      },
+                      position: "sticky",
+                      top: 0,
+                      zIndex: 1,
                     }}
                   >
-                    <Stack direction="row" spacing={1.5}>
-                      <Avatar
-                        sx={{
-                          bgcolor: "#fce7f3",
-                          color: "#db2777",
-                          width: 46,
-                          height: 46,
-                          fontWeight: 950,
-                        }}
-                      >
-                        {String(conv.contact || "?").slice(-1)}
-                      </Avatar>
-
-                      <Box sx={{ minWidth: 0, flex: 1 }}>
-                        <Stack
-                          direction="row"
-                          sx={{ justifyContent: "space-between", gap: 1 }}
-                        >
-                          <Typography sx={{ fontWeight: 900 }} noWrap>
-                            {getContactName(conv.contact)}
-                          </Typography>
-
-                          <Typography
-                            color="text.secondary"
-                            sx={{ fontSize: 12, whiteSpace: "nowrap" }}
-                          >
-                            {conv.lastDate
-                              ? new Date(conv.lastDate).toLocaleTimeString(
-                                  "pt-BR",
-                                  {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  }
-                                )
-                              : ""}
-                          </Typography>
-                        </Stack>
-
-                        <Typography
-                          color="text.secondary"
-                          noWrap
-                          sx={{ mt: 0.3, fontSize: 13 }}
-                        >
-                          {conv.lastMessage || "Sem mensagem"}
-                        </Typography>
-
-                        <Typography
-                          color="text.secondary"
-                          noWrap
-                          sx={{ mt: 0.2, fontSize: 12 }}
-                        >
-                          Numero: {formatPhone(conv.businessNumber)}
-                        </Typography>
-
-                        <Stack direction="row" spacing={0.7} sx={{ mt: 0.8 }}>
-                          <Chip
-                            size="small"
-                            icon={<WhatsApp sx={{ fontSize: 14 }} />}
-                            label="WhatsApp"
-                            sx={{
-                              height: 20,
-                              fontSize: 11,
-                              bgcolor: "#dcfce7",
-                              color: "#16a34a",
-                            }}
-                          />
-
-                          <Chip
-                            size="small"
-                            label={conv.clientName || "Sem cliente"}
-                            sx={{
-                              height: 20,
-                              fontSize: 11,
-                              bgcolor: "#eef2ff",
-                              color: "#4f46e5",
-                              maxWidth: 130,
-                            }}
-                          />
-
-                          <Chip
-                            size="small"
-                            label={conv.lastStatus || "Novo"}
-                            sx={{
-                              height: 20,
-                              fontSize: 11,
-                              bgcolor: "#ffedd5",
-                              color: "#ea580c",
-                              maxWidth: 130,
-                            }}
-                          />
-                        </Stack>
-                      </Box>
+                    <Stack
+                      direction="row"
+                      sx={{ alignItems: "center", justifyContent: "space-between" }}
+                    >
+                      <Typography sx={{ fontSize: 12, fontWeight: 950 }}>
+                        {formatPhone(group.number)}
+                      </Typography>
+                      <Chip
+                        size="small"
+                        label={`${group.rows.length} conversa${
+                          group.rows.length === 1 ? "" : "s"
+                        }`}
+                        sx={{ height: 20, fontSize: 11, fontWeight: 800 }}
+                      />
                     </Stack>
                   </Box>
-                );
-              })}
+
+                  {group.rows.map((conv) => {
+                    const convId = conv.id || conv.contact;
+                    const active = selectedConversationId === convId;
+
+                    return (
+                      <Box
+                        key={convId}
+                        onClick={() => {
+                          setSelectedConversationId(convId);
+                          setSelectedFrom(normalizePhone(conv.businessNumber || ""));
+                        }}
+                        sx={{
+                          p: 1.7,
+                          cursor: "pointer",
+                          borderBottom: "1px solid #eef2f6",
+                          bgcolor: active ? "#eff6ff" : "#fff",
+                          "&:hover": {
+                            bgcolor: active ? "#eff6ff" : "#f8fafc",
+                          },
+                        }}
+                      >
+                        <Stack direction="row" spacing={1.5}>
+                          <Avatar
+                            sx={{
+                              bgcolor: "#fce7f3",
+                              color: "#db2777",
+                              width: 46,
+                              height: 46,
+                              fontWeight: 950,
+                            }}
+                          >
+                            {String(conv.contact || "?").slice(-1)}
+                          </Avatar>
+
+                          <Box sx={{ minWidth: 0, flex: 1 }}>
+                            <Stack
+                              direction="row"
+                              sx={{ justifyContent: "space-between", gap: 1 }}
+                            >
+                              <Typography sx={{ fontWeight: 900 }} noWrap>
+                                {getContactName(conv.contact)}
+                              </Typography>
+
+                              <Typography
+                                color="text.secondary"
+                                sx={{ fontSize: 12, whiteSpace: "nowrap" }}
+                              >
+                                {conv.lastDate
+                                  ? new Date(conv.lastDate).toLocaleTimeString(
+                                      "pt-BR",
+                                      {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      }
+                                    )
+                                  : ""}
+                              </Typography>
+                            </Stack>
+
+                            <Typography
+                              color="text.secondary"
+                              noWrap
+                              sx={{ mt: 0.3, fontSize: 13 }}
+                            >
+                              {conv.lastMessage || "Sem mensagem"}
+                            </Typography>
+
+                            <Stack direction="row" spacing={0.7} sx={{ mt: 0.8 }}>
+                              <Chip
+                                size="small"
+                                icon={<WhatsApp sx={{ fontSize: 14 }} />}
+                                label="WhatsApp"
+                                sx={{
+                                  height: 20,
+                                  fontSize: 11,
+                                  bgcolor: "#dcfce7",
+                                  color: "#16a34a",
+                                }}
+                              />
+
+                              <Chip
+                                size="small"
+                                label={conv.clientName || "Sem cliente"}
+                                sx={{
+                                  height: 20,
+                                  fontSize: 11,
+                                  bgcolor: "#eef2ff",
+                                  color: "#4f46e5",
+                                  maxWidth: 130,
+                                }}
+                              />
+
+                              <Chip
+                                size="small"
+                                label={conv.lastStatus || "Novo"}
+                                sx={{
+                                  height: 20,
+                                  fontSize: 11,
+                                  bgcolor: "#ffedd5",
+                                  color: "#ea580c",
+                                  maxWidth: 130,
+                                }}
+                              />
+                            </Stack>
+                          </Box>
+                        </Stack>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              ))}
             </Box>
           </Box>
 
@@ -658,12 +703,12 @@ export default function ConversationsPage() {
                   fullWidth
                   size="small"
                   placeholder={
-                    selectedContact
+                    selected?.contact
                       ? "Digite uma mensagem..."
                       : "Selecione uma conversa..."
                   }
                   value={message}
-                  disabled={!selectedContact || sending}
+                  disabled={!selected?.contact || sending}
                   onChange={(e) => setMessage(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
@@ -679,7 +724,7 @@ export default function ConversationsPage() {
 
                 <IconButton
                   color="primary"
-                  disabled={!message.trim() || !selectedContact || sending}
+                  disabled={!message.trim() || !selected?.contact || sending}
                   onClick={sendMessage}
                   sx={{
                     bgcolor: "#2563eb",

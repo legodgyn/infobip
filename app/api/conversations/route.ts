@@ -65,10 +65,11 @@ export async function GET() {
     const clientId = msg.clientId || matchedNumber?.clientId || null;
     const clientName = matchedNumber?.clientName || null;
 
-    const key = normalizePhone(contact);
+    const key = `${normalizePhone(businessNumber)}:${normalizePhone(contact)}`;
 
     if (!conversationsMap.has(key)) {
       conversationsMap.set(key, {
+        id: key,
         contact: normalizePhone(contact),
         businessNumber: normalizePhone(businessNumber),
         clientId,
