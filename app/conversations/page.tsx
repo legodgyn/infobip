@@ -112,6 +112,7 @@ export default function ConversationsPage() {
     return conversations.filter((conv) => {
       return (
         String(conv.contact || "").toLowerCase().includes(q) ||
+        String(conv.businessNumber || "").toLowerCase().includes(q) ||
         String(conv.lastMessage || "").toLowerCase().includes(q) ||
         String(conv.clientName || "").toLowerCase().includes(q)
       );
@@ -340,6 +341,14 @@ export default function ConversationsPage() {
                           {conv.lastMessage || "Sem mensagem"}
                         </Typography>
 
+                        <Typography
+                          color="text.secondary"
+                          noWrap
+                          sx={{ mt: 0.2, fontSize: 12 }}
+                        >
+                          Numero: {formatPhone(conv.businessNumber)}
+                        </Typography>
+
                         <Stack direction="row" spacing={0.7} sx={{ mt: 0.8 }}>
                           <Chip
                             size="small"
@@ -427,7 +436,8 @@ export default function ConversationsPage() {
                       color="text.secondary"
                       sx={{ fontSize: 13 }}
                     >
-                      WhatsApp • {selected?.clientName || "Sem cliente"} • Última interação{" "}
+                      WhatsApp • {selected?.clientName || "Sem cliente"} • Numero:{" "}
+                      {formatPhone(selected?.businessNumber)} • Última interação{" "}
                       {lastMessage?.createdAt
                         ? new Date(lastMessage.createdAt).toLocaleString("pt-BR")
                         : "-"}
