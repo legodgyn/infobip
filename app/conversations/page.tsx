@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Avatar,
@@ -86,8 +86,13 @@ export default function ConversationsPage() {
   const [sendError, setSendError] = useState("");
   const [selectedFrom, setSelectedFrom] = useState("");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const selectedContactRef = useRef("");
 
-  async function load(keepSelected = true) {
+  useEffect(() => {
+    selectedContactRef.current = selectedContact;
+  }, [selectedContact]);
+
+  const load = useCallback(async (keepSelected = true) => {
     try {
       const params = new URLSearchParams();
       if (numberFilter) params.set("number", numberFilter);
@@ -105,7 +110,7 @@ export default function ConversationsPage() {
       setLoadError("");
       setConversations(list);
 
-      if ((!keepSelected || !selectedContact) && list?.[0]?.contact) {
+      if ((!keepSelected || !selectedContactRef.current) && list?.[0]?.contact) {
         setSelectedContact(list[0].contact);
         setSelectedFrom(list[0].businessNumber || "");
       }
@@ -113,7 +118,7 @@ export default function ConversationsPage() {
       setLoadError(err?.message || "Falha ao carregar conversas");
       setConversations([]);
     }
-  }
+  }, [numberFilter]);
 
   async function loadClients() {
     const res = await fetch("/api/clients", { cache: "no-store" });
@@ -130,23 +135,9 @@ export default function ConversationsPage() {
     setSelectedFrom("");
     load(false);
 
-    const timer = setInterval(() => load(true), 5000);
+    const timer = setInterval(() => load(true), 7000);
     return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [numberFilter]);
-
-  useEffect(() => {
-    const events = new EventSource("/api/realtime");
-
-    events.onmessage = () => {
-      load(true);
-    };
-
-    return () => {
-      events.close();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [numberFilter]);
+  }, [load]);
 
   const filterNumbers = useMemo(() => {
     const map = new Map<string, { number: string; label: string }>();
