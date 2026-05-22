@@ -140,7 +140,7 @@ function CustomToolbar({
         </Button>
 
         <Button variant="contained" startIcon={<Download />} href={exportUrl}>
-          Exportar CSV
+          Exportar XLSX
         </Button>
       </Stack>
     </GridToolbarContainer>
@@ -352,7 +352,7 @@ export default function ReportsPage() {
                   boxShadow: "0 16px 35px rgba(37,99,235,.24)",
                 }}
               >
-                Exportar CSV
+                Exportar XLSX
               </Button>
             </Stack>
 
