@@ -23,12 +23,32 @@ export async function GET(req: Request) {
 
   const messages = await prisma.message.findMany({
     where,
-    include: {
-      client: true,
-    },
     orderBy: { createdAt: "desc" },
     take: 1000,
   });
 
-  return NextResponse.json(messages);
+  const clientIds = Array.from(
+    new Set(messages.map((message) => message.clientId).filter(Boolean))
+  ) as string[];
+
+  const clients =
+    clientIds.length > 0
+      ? await prisma.$queryRawUnsafe<Array<{ id: string; name: string }>>(
+          `
+            SELECT "id", "name"
+            FROM "Client"
+            WHERE "id" = ANY($1)
+          `,
+          clientIds
+        )
+      : [];
+
+  const clientById = new Map(clients.map((client) => [client.id, client]));
+
+  return NextResponse.json(
+    messages.map((message) => ({
+      ...message,
+      client: message.clientId ? clientById.get(message.clientId) || null : null,
+    }))
+  );
 }

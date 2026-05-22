@@ -26,12 +26,27 @@ export async function GET(req: Request) {
 
   const messages = await prisma.message.findMany({
     where,
-    include: {
-      client: true,
-    },
     orderBy: { createdAt: "desc" },
     take: 5000,
   });
+
+  const clientIds = Array.from(
+    new Set(messages.map((message) => message.clientId).filter(Boolean))
+  ) as string[];
+
+  const clients =
+    clientIds.length > 0
+      ? await prisma.$queryRawUnsafe<Array<{ id: string; name: string }>>(
+          `
+            SELECT "id", "name"
+            FROM "Client"
+            WHERE "id" = ANY($1)
+          `,
+          clientIds
+        )
+      : [];
+
+  const clientById = new Map(clients.map((client) => [client.id, client]));
 
   const csv = [
     [
@@ -50,7 +65,7 @@ export async function GET(req: Request) {
 
     ...messages.map((m) =>
       [
-        m.client?.name,
+        m.clientId ? clientById.get(m.clientId)?.name : null,
         m.direction,
         m.from,
         m.to,

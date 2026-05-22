@@ -64,8 +64,10 @@ export async function POST(req: Request) {
         : {
             clientId: user.clientId || "__NO_CLIENT__",
           },
-    include: {
-      client: true,
+    select: {
+      id: true,
+      number: true,
+      clientId: true,
     },
   });
 
