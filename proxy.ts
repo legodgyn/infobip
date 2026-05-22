@@ -1,13 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const publicRoutes = [
-  "/login",
-  "/api/auth/login",
-  "/api/webhooks/infobip",
-];
+const publicRoutes = ["/login", "/api/auth/login", "/api/webhooks/infobip"];
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   const isPublic =
@@ -20,12 +16,14 @@ export function middleware(req: NextRequest) {
   if (!token && !isPublic) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
+    url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
 
   if (token && pathname === "/login") {
     const url = req.nextUrl.clone();
     url.pathname = "/";
+    url.search = "";
     return NextResponse.redirect(url);
   }
 
