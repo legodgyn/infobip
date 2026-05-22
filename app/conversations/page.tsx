@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Avatar,
@@ -71,40 +71,31 @@ export default function ConversationsPage() {
   const [sendError, setSendError] = useState("");
   const [selectedFrom, setSelectedFrom] = useState("");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const selectedContactRef = useRef("");
 
-  async function load(keepSelected = true) {
+  useEffect(() => {
+    selectedContactRef.current = selectedContact;
+  }, [selectedContact]);
+
+  const load = useCallback(async (keepSelected = true) => {
     const res = await fetch("/api/conversations", { cache: "no-store" });
     const data = await res.json();
 
     const list = Array.isArray(data) ? data : [];
     setConversations(list);
 
-    if ((!keepSelected || !selectedContact) && list?.[0]?.contact) {
+    if ((!keepSelected || !selectedContactRef.current) && list?.[0]?.contact) {
       setSelectedContact(list[0].contact);
       setSelectedFrom(list[0].businessNumber || "");
     }
-  }
+  }, []);
 
   useEffect(() => {
     load(false);
 
-    const timer = setInterval(() => load(true), 5000);
+    const timer = setInterval(() => load(true), 7000);
     return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    const events = new EventSource("/api/realtime");
-
-    events.onmessage = () => {
-      load(true);
-    };
-
-    return () => {
-      events.close();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [load]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -119,14 +110,21 @@ export default function ConversationsPage() {
     });
   }, [conversations, search]);
 
-  const selected = conversations.find((c) => c.contact === selectedContact);
+  const selected = useMemo(
+    () => conversations.find((c) => c.contact === selectedContact),
+    [conversations, selectedContact]
+  );
 
-  const messages = selected?.messages
-    ? [...selected.messages].sort(
-        (a: any, b: any) =>
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      )
-    : [];
+  const messages = useMemo(
+    () =>
+      selected?.messages
+        ? [...selected.messages].sort(
+            (a: any, b: any) =>
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          )
+        : [],
+    [selected?.messages]
+  );
 
   const lastMessage = messages[messages.length - 1];
 
@@ -149,15 +147,14 @@ export default function ConversationsPage() {
   }, [selected?.businessNumber, messages]);
 
   useEffect(() => {
-    if (selected?.businessNumber) {
-      setSelectedFrom(normalizePhone(selected.businessNumber));
-      return;
-    }
+    const nextFrom = selected?.businessNumber
+      ? normalizePhone(selected.businessNumber)
+      : availableNumbers[0] || "";
 
-    if (availableNumbers[0]) {
-      setSelectedFrom(availableNumbers[0]);
+    if (nextFrom && nextFrom !== selectedFrom) {
+      setSelectedFrom(nextFrom);
     }
-  }, [selected?.businessNumber, availableNumbers]);
+  }, [selected?.businessNumber, availableNumbers, selectedFrom]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
