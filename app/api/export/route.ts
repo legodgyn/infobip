@@ -46,6 +46,44 @@ function businessNumberExpression() {
   )`;
 }
 
+function statusFilter(status: string, index: number) {
+  return `
+    (
+      lower(COALESCE(m."status", '')) LIKE '%' || $${index} || '%'
+      OR EXISTS (
+        SELECT 1
+        FROM "MessageEvent" me
+        WHERE me."messageId" = m."id"
+          AND (
+            lower(COALESCE(me."status", '')) LIKE '%' || $${index} || '%'
+            OR lower(COALESCE(me."raw"::text, '')) LIKE '%' || $${index} || '%'
+            OR (
+              $${index} IN ('seen', 'read')
+              AND (
+                lower(COALESCE(me."status", '')) LIKE '%seen%'
+                OR lower(COALESCE(me."status", '')) LIKE '%read%'
+                OR lower(COALESCE(me."raw"::text, '')) LIKE '%seen%'
+                OR lower(COALESCE(me."raw"::text, '')) LIKE '%read%'
+              )
+            )
+          )
+      )
+      OR (
+        $${index} = 'delivered'
+        AND m."deliveredAt" IS NOT NULL
+      )
+      OR (
+        $${index} IN ('seen', 'read')
+        AND m."seenAt" IS NOT NULL
+      )
+      OR (
+        $${index} IN ('failed', 'rejected', 'undeliverable', 'expired')
+        AND m."failedAt" IS NOT NULL
+      )
+    )
+  `;
+}
+
 function addScopedFilters(
   filters: string[],
   values: unknown[],
@@ -96,7 +134,7 @@ function addScopedFilters(
   if (options.status && options.status !== "all") {
     values.push(options.status.toLowerCase());
     const index = values.length;
-    filters.push(`lower(COALESCE(m."status", '')) LIKE '%' || $${index} || '%'`);
+    filters.push(statusFilter(options.status.toLowerCase(), index));
   }
 
   if (options.start) {
@@ -451,7 +489,24 @@ export async function GET(req: Request) {
         m."direction"::text AS "direction",
         m."from",
         m."to",
-        m."status",
+        CASE
+          WHEN m."seenAt" IS NOT NULL
+            OR EXISTS (
+              SELECT 1
+              FROM "MessageEvent" me
+              WHERE me."messageId" = m."id"
+                AND (
+                  lower(COALESCE(me."status", '')) LIKE '%seen%'
+                  OR lower(COALESCE(me."status", '')) LIKE '%read%'
+                  OR lower(COALESCE(me."raw"::text, '')) LIKE '%seen%'
+                  OR lower(COALESCE(me."raw"::text, '')) LIKE '%read%'
+                )
+            )
+            THEN 'READ'
+          WHEN m."failedAt" IS NOT NULL THEN 'FAILED'
+          WHEN m."deliveredAt" IS NOT NULL THEN 'DELIVERED'
+          ELSE m."status"
+        END AS "status",
         m."text",
         m."createdAt",
         m."sentAt",

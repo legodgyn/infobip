@@ -34,21 +34,32 @@ import {
 import AppShell from "@/components/AppShell";
 import { theme } from "@/theme";
 
-function statusChip(status?: string) {
-  const s = String(status || "").toLowerCase();
+function statusText(row: any) {
+  const s = String(row?.status || "").toLowerCase();
 
-  if (s.includes("delivered")) {
-    return (
-      <Chip
-        size="small"
-        icon={<CheckCircle />}
-        label="Entregue"
-        color="success"
-      />
-    );
+  if (row?.failedAt || s.includes("failed") || s.includes("rejected")) {
+    return "failed";
   }
 
-  if (s.includes("seen") || s.includes("read")) {
+  if (row?.seenAt || s.includes("seen") || s.includes("read")) {
+    return "seen";
+  }
+
+  if (row?.deliveredAt || s.includes("delivered")) {
+    return "delivered";
+  }
+
+  if (s.includes("sent")) {
+    return "sent";
+  }
+
+  return s || "pending";
+}
+
+function statusChip(row: any) {
+  const status = statusText(row);
+
+  if (status === "seen") {
     return (
       <Chip
         size="small"
@@ -59,7 +70,18 @@ function statusChip(status?: string) {
     );
   }
 
-  if (s.includes("failed") || s.includes("rejected")) {
+  if (status === "delivered") {
+    return (
+      <Chip
+        size="small"
+        icon={<CheckCircle />}
+        label="Entregue"
+        color="success"
+      />
+    );
+  }
+
+  if (status === "failed") {
     return (
       <Chip
         size="small"
@@ -70,7 +92,7 @@ function statusChip(status?: string) {
     );
   }
 
-  if (s.includes("sent")) {
+  if (status === "sent") {
     return (
       <Chip
         size="small"
@@ -81,7 +103,7 @@ function statusChip(status?: string) {
     );
   }
 
-  return <Chip size="small" label={status || "Pendente"} variant="outlined" />;
+  return <Chip size="small" label={row?.status || "Pendente"} variant="outlined" />;
 }
 
 function formatPhone(phone?: string) {
@@ -214,19 +236,9 @@ export default function ReportsPage() {
 
   const total = rows.length;
 
-  const delivered = rows.filter((r) =>
-    String(r.status || "").toLowerCase().includes("delivered")
-  ).length;
-
-  const seen = rows.filter((r) => {
-    const s = String(r.status || "").toLowerCase();
-    return s.includes("seen") || s.includes("read");
-  }).length;
-
-  const failed = rows.filter((r) => {
-    const s = String(r.status || "").toLowerCase();
-    return s.includes("failed") || s.includes("rejected");
-  }).length;
+  const delivered = rows.filter((r) => statusText(r) === "delivered").length;
+  const seen = rows.filter((r) => statusText(r) === "seen").length;
+  const failed = rows.filter((r) => statusText(r) === "failed").length;
 
   const inbound = rows.filter((r) => r.direction === "inbound").length;
 
@@ -266,7 +278,7 @@ export default function ReportsPage() {
       field: "status",
       headerName: "Status",
       width: 160,
-      renderCell: (params) => statusChip(params.value),
+      renderCell: (params) => statusChip(params.row),
     },
     {
       field: "text",

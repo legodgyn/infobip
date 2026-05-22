@@ -96,7 +96,8 @@ export async function GET(req: Request) {
           m."seenAt",
           m."failedAt",
           lower(COALESCE(m."status", '')) AS message_status,
-          lower(COALESCE(string_agg(me."status", ' '), '')) AS event_status
+          lower(COALESCE(string_agg(me."status", ' '), '')) AS event_status,
+          lower(COALESCE(string_agg(me."raw"::text, ' '), '')) AS event_raw
         FROM scoped m
         LEFT JOIN "MessageEvent" me ON me."messageId" = m."id"
         GROUP BY
@@ -129,6 +130,8 @@ export async function GET(req: Request) {
               OR message_status LIKE '%read%'
               OR event_status LIKE '%seen%'
               OR event_status LIKE '%read%'
+              OR event_raw LIKE '%seen%'
+              OR event_raw LIKE '%read%'
             )
         ) AS lidas,
         COUNT(*) FILTER (

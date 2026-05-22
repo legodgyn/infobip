@@ -18,14 +18,17 @@ function asString(value: unknown) {
 }
 
 function getStatus(item: any) {
-  return (
+  const parts = [
     item?.status?.groupName ||
-    item?.status?.name ||
-    item?.status ||
-    item?.event ||
-    item?.message?.status ||
-    null
-  );
+      null,
+    item?.status?.name || null,
+    item?.status?.description || null,
+    typeof item?.status === "string" ? item.status : null,
+    item?.event || null,
+    item?.message?.status || null,
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(" ") : null;
 }
 
 function getText(item: any) {
@@ -48,6 +51,23 @@ function getMessageId(item: any) {
     item?.id ||
     item?.message?.id ||
     null
+  );
+}
+
+function getMessageIds(item: any) {
+  return Array.from(
+    new Set(
+      [
+        item?.messageId,
+        item?.pairedMessageId,
+        item?.message_id,
+        item?.messageID,
+        item?.id,
+        item?.message?.id,
+      ]
+        .map((value) => asString(value))
+        .filter(Boolean)
+    )
   );
 }
 
@@ -120,24 +140,25 @@ async function findClientIdByNumber(from?: string | null, to?: string | null) {
   return rows[0]?.clientId || null;
 }
 
-async function findExistingMessage(infobipMsgId: string | null) {
-  if (!infobipMsgId) return null;
+async function findExistingMessage(infobipMsgIds: string[]) {
+  if (!infobipMsgIds.length) return null;
 
   const rows = await prisma.$queryRawUnsafe<ExistingMessage[]>(
     `
       SELECT "id", "clientId"
       FROM "Message"
-      WHERE "infobipMsgId" = $1
+      WHERE "infobipMsgId" = ANY($1::text[])
       LIMIT 1
     `,
-    infobipMsgId
+    infobipMsgIds
   );
 
   return rows[0] || null;
 }
 
 async function saveMessage(item: any, body: any) {
-  const infobipMsgId = asString(getMessageId(item)) || null;
+  const infobipMsgIds = getMessageIds(item);
+  const infobipMsgId = infobipMsgIds[0] || asString(getMessageId(item)) || null;
   const status = asString(getStatus(item)) || null;
   const from = normalizePhone(getFrom(item));
   const to = normalizePhone(getTo(item));
@@ -171,7 +192,7 @@ async function saveMessage(item: any, body: any) {
       ? new Date()
       : null;
 
-  const existing = await findExistingMessage(infobipMsgId);
+  const existing = await findExistingMessage(infobipMsgIds);
   let messageId = existing?.id || null;
 
   if (existing) {
