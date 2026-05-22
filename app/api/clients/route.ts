@@ -91,3 +91,64 @@ export async function GET() {
 
   return NextResponse.json(await listClients(user.clientId));
 }
+
+export async function POST(req: Request) {
+  const user = await getCurrentUser();
+
+  if (!user || user.role !== "admin") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const name = String(body.name || "").trim();
+
+  if (!name) {
+    return NextResponse.json(
+      { error: "Nome do cliente e obrigatorio." },
+      { status: 400 }
+    );
+  }
+
+  const created = await prisma.$queryRaw<{ id: string }[]>`
+    INSERT INTO "Client" ("id", "name", "createdAt")
+    VALUES ('cl_' || replace(gen_random_uuid()::text, '-', ''), ${name}, now())
+    RETURNING "id"
+  `;
+
+  return NextResponse.json((await listClients(created[0]?.id))[0]);
+}
+
+export async function PUT(req: Request) {
+  const user = await getCurrentUser();
+
+  if (!user || user.role !== "admin") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const id = String(body.id || "").trim();
+  const name = String(body.name || "").trim();
+
+  if (!id || !name) {
+    return NextResponse.json(
+      { error: "ID e nome do cliente sao obrigatorios." },
+      { status: 400 }
+    );
+  }
+
+  const updated = await prisma.$queryRaw<{ id: string }[]>`
+    UPDATE "Client"
+    SET "name" = ${name}
+    WHERE "id" = ${id}
+    RETURNING "id"
+  `;
+
+  if (!updated[0]) {
+    return NextResponse.json(
+      { error: "Cliente nao encontrado." },
+      { status: 404 }
+    );
+  }
+
+  return NextResponse.json((await listClients(updated[0].id))[0]);
+}
