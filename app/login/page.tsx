@@ -88,7 +88,7 @@ export default function LoginPage() {
             {error && <Alert severity="error">{error}</Alert>}
 
             <TextField
-              label="E-mail"
+              label="Email/Usuario"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
