@@ -137,6 +137,23 @@ function formatDate(value?: Date | null) {
   return new Date(value).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 }
 
+function formatReportDate(value = new Date()) {
+  return value.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+}
+
+function formatFilterDate(value?: string | null) {
+  if (!value) return "";
+  const [year, month, day] = value.split("-");
+  return year && month && day ? `${day}/${month}/${year}` : value;
+}
+
+function reportPeriod(start?: string | null, end?: string | null) {
+  if (start && end) return `${formatFilterDate(start)} a ${formatFilterDate(end)}`;
+  if (start) return `A partir de ${formatFilterDate(start)}`;
+  if (end) return `Ate ${formatFilterDate(end)}`;
+  return "Todos os registros filtrados";
+}
+
 function pct(value: number, total: number) {
   return total ? value / total : 0;
 }
@@ -177,7 +194,11 @@ function setupSheet(sheet: ExcelJS.Worksheet) {
   sheet.properties.defaultRowHeight = 22;
 }
 
-function addSummarySheet(workbook: ExcelJS.Workbook, rows: ExportRow[]) {
+function addSummarySheet(
+  workbook: ExcelJS.Workbook,
+  rows: ExportRow[],
+  filters: { start?: string | null; end?: string | null }
+) {
   const sheet = workbook.addWorksheet("Resumo");
   const data = summarize(rows);
 
@@ -187,8 +208,12 @@ function addSummarySheet(workbook: ExcelJS.Workbook, rows: ExportRow[]) {
   sheet.getCell("A1").alignment = { vertical: "middle" };
   sheet.getRow(1).height = 32;
 
+  sheet.addRow(["Gerado em", formatReportDate(), "Periodo", reportPeriod(filters.start, filters.end)]);
+  sheet.getRow(2).font = { bold: true, color: { argb: "FF334155" } };
+  sheet.getRow(2).fill = BLUE_FILL;
+
   sheet.addRow([]);
-  const header = sheet.addRow(["Indicador", "Valor", "Percentual sobre envios", "Observacao"]);
+  const header = sheet.addRow(["Indicador", "Mensagens", "Percentual sobre envios", "Observacao"]);
   styleHeader(header);
 
   const rowsToAdd = [
@@ -211,12 +236,55 @@ function addSummarySheet(workbook: ExcelJS.Workbook, rows: ExportRow[]) {
   sheet.getColumn(3).numFmt = "0.00%";
 
   sheet.eachRow((row, rowNumber) => {
-    if (rowNumber > 3) {
+    if (rowNumber > 4) {
       row.eachCell((cell) => {
         cell.border = { bottom: { style: "thin", color: { argb: "FFE2E8F0" } } };
       });
     }
   });
+}
+
+function addChartSheet(workbook: ExcelJS.Workbook, rows: ExportRow[]) {
+  const sheet = workbook.addWorksheet("Grafico");
+  const data = summarize(rows);
+  const chartRows = [
+    ["Enviadas", data.outbound, "FF2563EB"],
+    ["Entregues", data.delivered, "FF22C55E"],
+    ["Lidas", data.seen, "FF7C3AED"],
+    ["Falhas", data.failed, "FFF97316"],
+    ["Recebidas", data.inbound, "FF06B6D4"],
+  ] as const;
+  const maxValue = Math.max(...chartRows.map((item) => item[1]), 1);
+
+  sheet.mergeCells("A1:N1");
+  sheet.getCell("A1").value = "Grafico de mensagens";
+  sheet.getCell("A1").font = { bold: true, size: 18, color: { argb: "FF0F172A" } };
+  sheet.getCell("A1").alignment = { vertical: "middle" };
+  sheet.getRow(1).height = 32;
+
+  const header = sheet.addRow(["Indicador", "Mensagens", "", "", "", "", "", "", "", "", "", "", "", ""]);
+  styleHeader(header);
+
+  chartRows.forEach(([label, value, color]) => {
+    const row = sheet.addRow([label, value]);
+    const barCells = Math.max(1, Math.round((value / maxValue) * 10));
+    for (let column = 4; column < 4 + barCells; column += 1) {
+      const cell = row.getCell(column);
+      cell.value = "";
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: color } };
+    }
+    row.getCell(1).font = { bold: true };
+    row.getCell(2).numFmt = "0";
+    row.eachCell((cell) => {
+      cell.border = { bottom: { style: "thin", color: { argb: "FFE2E8F0" } } };
+    });
+  });
+
+  sheet.getColumn(1).width = 20;
+  sheet.getColumn(2).width = 14;
+  for (let column = 4; column <= 13; column += 1) {
+    sheet.getColumn(column).width = 5;
+  }
 }
 
 function addGroupedSheet(
@@ -406,7 +474,8 @@ export async function GET(req: Request) {
   workbook.created = new Date();
   workbook.modified = new Date();
 
-  addSummarySheet(workbook, rows);
+  addSummarySheet(workbook, rows, { start, end });
+  addChartSheet(workbook, rows);
   addGroupedSheet(workbook, "Por numero", rows, (row) => row.businessNumber || "");
   addGroupedSheet(workbook, "Por cliente", rows, (row) => row.clientName || "Sem cliente");
   addDetailsSheet(workbook, rows);
