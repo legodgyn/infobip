@@ -2,57 +2,126 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
+type MessageRow = {
+  id: string;
+  infobipMsgId: string | null;
+  clientId: string | null;
+  clientName: string | null;
+  from: string;
+  to: string;
+  text: string | null;
+  direction: string;
+  status: string | null;
+  createdAt: Date;
+  sentAt: Date | null;
+  receivedAt: Date | null;
+  deliveredAt: Date | null;
+  seenAt: Date | null;
+  failedAt: Date | null;
+  failureReason: string | null;
+  raw: unknown;
+};
+
 function normalizePhone(value?: string | null) {
   return String(value || "").replace(/\D/g, "");
 }
 
-function matchesPhone(a?: string | null, b?: string | null) {
-  const left = normalizePhone(a);
-  const right = normalizePhone(b);
-
-  if (!left || !right) return false;
-
-  return left === right || left.endsWith(right) || right.endsWith(left);
-}
-
-export async function GET() {
+export async function GET(req: Request) {
   const user = await getCurrentUser();
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const where =
-    user.role === "admin"
-      ? {}
-      : {
-          clientId: user.clientId || "__NO_CLIENT__",
-        };
+  const { searchParams } = new URL(req.url);
+  const selectedNumber = normalizePhone(searchParams.get("number"));
+  const selectedClientId =
+    user.role === "admin" ? searchParams.get("clientId") || "" : user.clientId || "";
 
-  const messages = await prisma.message.findMany({
-    where,
-    include: {
-      client: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 500,
-  });
+  const filters: string[] = [`linked."clientId" IS NOT NULL`];
+  const values: unknown[] = [];
 
-  const clientNumbers = await prisma.clientNumber.findMany({
-    include: {
-      client: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-  });
+  if (selectedClientId) {
+    values.push(selectedClientId);
+    filters.push(`linked."clientId" = $${values.length}`);
+  } else if (user.role !== "admin") {
+    filters.push(`FALSE`);
+  }
+
+  if (selectedNumber) {
+    values.push(selectedNumber);
+    const index = values.length;
+    filters.push(
+      `(regexp_replace(linked."number", '\\D', '', 'g') = $${index} OR regexp_replace(linked."number", '\\D', '', 'g') LIKE '%' || $${index} OR $${index} LIKE '%' || regexp_replace(linked."number", '\\D', '', 'g'))`
+    );
+  }
+
+  const messages = await prisma.$queryRawUnsafe<MessageRow[]>(
+    `
+      SELECT
+        m."id",
+        m."infobipMsgId",
+        COALESCE(m."clientId", linked."clientId") AS "clientId",
+        COALESCE(mc."name", linked."clientName") AS "clientName",
+        m."from",
+        m."to",
+        m."text",
+        m."direction"::text AS "direction",
+        m."status",
+        m."createdAt",
+        m."sentAt",
+        m."receivedAt",
+        m."deliveredAt",
+        m."seenAt",
+        m."failedAt",
+        m."failureReason",
+        m."raw"
+      FROM "Message" m
+      LEFT JOIN "Client" mc ON mc."id" = m."clientId"
+      LEFT JOIN LATERAL (
+        SELECT
+          cn."number",
+          cn."clientId",
+          c."name" AS "clientName"
+        FROM "ClientNumber" cn
+        JOIN "Client" c ON c."id" = cn."clientId"
+        WHERE
+          regexp_replace(cn."number", '\\D', '', 'g') = regexp_replace(
+            CASE
+              WHEN m."direction"::text = 'inbound' THEN m."to"
+              ELSE m."from"
+            END,
+            '\\D',
+            '',
+            'g'
+          )
+          OR regexp_replace(cn."number", '\\D', '', 'g') LIKE '%' || regexp_replace(
+            CASE
+              WHEN m."direction"::text = 'inbound' THEN m."to"
+              ELSE m."from"
+            END,
+            '\\D',
+            '',
+            'g'
+          )
+          OR regexp_replace(
+            CASE
+              WHEN m."direction"::text = 'inbound' THEN m."to"
+              ELSE m."from"
+            END,
+            '\\D',
+            '',
+            'g'
+          ) LIKE '%' || regexp_replace(cn."number", '\\D', '', 'g')
+        ORDER BY cn."createdAt" DESC
+        LIMIT 1
+      ) linked ON true
+      WHERE ${filters.join(" AND ")}
+      ORDER BY m."createdAt" DESC
+      LIMIT 500
+    `,
+    ...values
+  );
 
   const conversationsMap = new Map<string, any>();
 
@@ -62,12 +131,8 @@ export async function GET() {
 
     if (!contact) continue;
 
-    const matchedNumber = clientNumbers.find((item) =>
-      matchesPhone(item.number, businessNumber)
-    );
-
-    const clientId = msg.clientId || matchedNumber?.clientId || null;
-    const clientName = msg.client?.name || matchedNumber?.client?.name || null;
+    const clientId = msg.clientId || null;
+    const clientName = msg.clientName || null;
 
     const key = normalizePhone(contact);
 

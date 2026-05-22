@@ -62,8 +62,22 @@ function normalizePhone(phone?: string) {
   return String(phone || "").replace(/\D/g, "");
 }
 
+type ClientNumber = {
+  id: string;
+  number: string;
+  label?: string | null;
+};
+
+type Client = {
+  id: string;
+  name: string;
+  numbers?: ClientNumber[];
+};
+
 export default function ConversationsPage() {
   const [conversations, setConversations] = useState<any[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [numberFilter, setNumberFilter] = useState("");
   const [selectedContact, setSelectedContact] = useState("");
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
@@ -73,7 +87,12 @@ export default function ConversationsPage() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   async function load(keepSelected = true) {
-    const res = await fetch("/api/conversations", { cache: "no-store" });
+    const params = new URLSearchParams();
+    if (numberFilter) params.set("number", numberFilter);
+
+    const res = await fetch(`/api/conversations?${params.toString()}`, {
+      cache: "no-store",
+    });
     const data = await res.json();
 
     const list = Array.isArray(data) ? data : [];
@@ -85,13 +104,25 @@ export default function ConversationsPage() {
     }
   }
 
+  async function loadClients() {
+    const res = await fetch("/api/clients", { cache: "no-store" });
+    const data = await res.json();
+    setClients(Array.isArray(data) ? data : []);
+  }
+
   useEffect(() => {
+    loadClients();
+  }, []);
+
+  useEffect(() => {
+    setSelectedContact("");
+    setSelectedFrom("");
     load(false);
 
     const timer = setInterval(() => load(true), 5000);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [numberFilter]);
 
   useEffect(() => {
     const events = new EventSource("/api/realtime");
@@ -104,7 +135,29 @@ export default function ConversationsPage() {
       events.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [numberFilter]);
+
+  const filterNumbers = useMemo(() => {
+    const map = new Map<string, { number: string; label: string }>();
+
+    for (const client of clients) {
+      for (const item of client.numbers || []) {
+        const number = normalizePhone(item.number);
+        if (!number) continue;
+
+        map.set(number, {
+          number,
+          label: item.label
+            ? `${item.label} • ${formatPhone(number)}`
+            : `${client.name} • ${formatPhone(number)}`,
+        });
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) =>
+      a.label.localeCompare(b.label, "pt-BR")
+    );
+  }, [clients]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -242,6 +295,21 @@ export default function ConversationsPage() {
                     },
                   }}
                 />
+
+                <TextField
+                  select
+                  size="small"
+                  value={numberFilter}
+                  onChange={(e) => setNumberFilter(e.target.value)}
+                  sx={{ minWidth: 170 }}
+                >
+                  <MenuItem value="">Todos</MenuItem>
+                  {filterNumbers.map((item) => (
+                    <MenuItem key={item.number} value={item.number}>
+                      {item.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
 
                 <IconButton>
                   <FilterList />
