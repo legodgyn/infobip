@@ -103,6 +103,7 @@ function buildQuery(filters: any) {
   const params = new URLSearchParams();
 
   if (filters.clientId) params.set("clientId", filters.clientId);
+  if (filters.number) params.set("number", filters.number);
   if (filters.status && filters.status !== "all") {
     params.set("status", filters.status);
   }
@@ -147,18 +148,38 @@ function CustomToolbar({
 }
 
 export default function ReportsPage() {
+  const [user, setUser] = useState<any>(undefined);
   const [rows, setRows] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   const [filters, setFilters] = useState({
     clientId: "",
+    number: "",
     status: "all",
     start: "",
     end: "",
   });
 
+  const isAdmin = user?.role === "admin";
+  const selectedClient = isAdmin
+    ? clients.find((client) => client.id === filters.clientId)
+    : clients.find((client) => client.id === user?.clientId);
+  const clientNumbers = selectedClient?.numbers || [];
+
   const query = useMemo(() => buildQuery(filters), [filters]);
+
+  async function loadUser() {
+    const res = await fetch("/api/auth/me");
+
+    if (!res.ok) {
+      setUser(null);
+      return;
+    }
+
+    const data = await res.json();
+    setUser(data?.user || null);
+  }
 
   async function loadReports() {
     setLoading(true);
@@ -182,6 +203,7 @@ export default function ReportsPage() {
   }
 
   useEffect(() => {
+    loadUser();
     loadClients();
   }, []);
 
@@ -273,6 +295,7 @@ export default function ReportsPage() {
   function clearFilters() {
     setFilters({
       clientId: "",
+      number: "",
       status: "all",
       start: "",
       end: "",
@@ -407,22 +430,47 @@ export default function ReportsPage() {
                     alignItems: "end",
                   }}
                 >
+                  {isAdmin && (
+                    <FormControl fullWidth>
+                      <InputLabel>Cliente</InputLabel>
+                      <Select
+                        label="Cliente"
+                        value={filters.clientId}
+                        onChange={(e) =>
+                          setFilters((prev) => ({
+                            ...prev,
+                            clientId: e.target.value,
+                            number: "",
+                          }))
+                        }
+                      >
+                        <MenuItem value="">Todos os clientes</MenuItem>
+                        {clients.map((client) => (
+                          <MenuItem key={client.id} value={client.id}>
+                            {client.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  )}
+
                   <FormControl fullWidth>
-                    <InputLabel>Cliente</InputLabel>
+                    <InputLabel>Número</InputLabel>
                     <Select
-                      label="Cliente"
-                      value={filters.clientId}
+                      label="Número"
+                      value={filters.number}
                       onChange={(e) =>
                         setFilters((prev) => ({
                           ...prev,
-                          clientId: e.target.value,
+                          number: e.target.value,
                         }))
                       }
+                      disabled={!clientNumbers.length}
                     >
-                      <MenuItem value="">Todos os clientes</MenuItem>
-                      {clients.map((client) => (
-                        <MenuItem key={client.id} value={client.id}>
-                          {client.name}
+                      <MenuItem value="">Todos os números</MenuItem>
+                      {clientNumbers.map((item: any) => (
+                        <MenuItem key={item.id} value={item.number}>
+                          {item.label ? `${item.label} • ${item.number}` : item.number}
                         </MenuItem>
                       ))}
                     </Select>
