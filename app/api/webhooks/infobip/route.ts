@@ -78,6 +78,21 @@ function getItems(body: any) {
   return [body];
 }
 
+function summarizeWebhook(body: any, items: any[]) {
+  const first = items[0] || {};
+
+  return {
+    received: items.length,
+    messageCount: body?.messageCount ?? null,
+    pendingMessageCount: body?.pendingMessageCount ?? null,
+    firstMessageId: getMessageId(first),
+    firstFrom: getFrom(first),
+    firstTo: getTo(first),
+    firstStatus: getStatus(first),
+    hasText: Boolean(getText(first)),
+  };
+}
+
 async function findClientIdByNumber(from?: string | null, to?: string | null) {
   const fromClean = normalizePhone(from);
   const toClean = normalizePhone(to);
@@ -309,7 +324,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const items = getItems(body);
 
-    console.log("INFOBIP WEBHOOK RECEBIDO:", JSON.stringify(body, null, 2));
+    console.log("INFOBIP WEBHOOK RECEBIDO:", summarizeWebhook(body, items));
 
     for (const item of items) {
       await saveMessage(item, body);
