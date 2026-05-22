@@ -82,25 +82,36 @@ export default function ConversationsPage() {
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [sendError, setSendError] = useState("");
   const [selectedFrom, setSelectedFrom] = useState("");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   async function load(keepSelected = true) {
-    const params = new URLSearchParams();
-    if (numberFilter) params.set("number", numberFilter);
+    try {
+      const params = new URLSearchParams();
+      if (numberFilter) params.set("number", numberFilter);
 
-    const res = await fetch(`/api/conversations?${params.toString()}`, {
-      cache: "no-store",
-    });
-    const data = await res.json();
+      const res = await fetch(`/api/conversations?${params.toString()}`, {
+        cache: "no-store",
+      });
+      const data = await res.json();
 
-    const list = Array.isArray(data) ? data : [];
-    setConversations(list);
+      if (!res.ok) {
+        throw new Error(data?.error || "Falha ao carregar conversas");
+      }
 
-    if ((!keepSelected || !selectedContact) && list?.[0]?.contact) {
-      setSelectedContact(list[0].contact);
-      setSelectedFrom(list[0].businessNumber || "");
+      const list = Array.isArray(data) ? data : [];
+      setLoadError("");
+      setConversations(list);
+
+      if ((!keepSelected || !selectedContact) && list?.[0]?.contact) {
+        setSelectedContact(list[0].contact);
+        setSelectedFrom(list[0].businessNumber || "");
+      }
+    } catch (err: any) {
+      setLoadError(err?.message || "Falha ao carregar conversas");
+      setConversations([]);
     }
   }
 
@@ -324,6 +335,12 @@ export default function ConversationsPage() {
             <Divider />
 
             <Box sx={{ px: 2, py: 1.5 }}>
+              {loadError && (
+                <Alert severity="error" sx={{ mb: 1.5 }}>
+                  {loadError}
+                </Alert>
+              )}
+
               <Stack
                 direction="row"
                 sx={{ alignItems: "center", justifyContent: "space-between" }}
