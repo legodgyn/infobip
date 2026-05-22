@@ -73,6 +73,7 @@ export default function ClientsPage() {
 
   const [openUser, setOpenUser] = useState(false);
   const [userForm, setUserForm] = useState({
+    id: "",
     name: "",
     email: "",
     password: "123456",
@@ -174,9 +175,20 @@ export default function ClientsPage() {
 
   function addUserModal() {
     setUserForm({
+      id: "",
       name: selected?.name || "",
       email: selected?.email || "",
       password: "123456",
+    });
+    setOpenUser(true);
+  }
+
+  function editUserModal(user: any) {
+    setUserForm({
+      id: user.id,
+      name: user.name || "",
+      email: user.email || "",
+      password: "",
     });
     setOpenUser(true);
   }
@@ -185,12 +197,22 @@ export default function ClientsPage() {
     if (!selected?.id || !userForm.name || !userForm.email) return;
 
     await fetch("/api/client-users", {
-      method: "POST",
+      method: userForm.id ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...userForm, clientId: selected.id }),
     });
 
     setOpenUser(false);
+    await loadClients();
+  }
+
+  async function deleteUser(id: string) {
+    if (!confirm("Excluir este acesso do cliente?")) return;
+
+    await fetch(`/api/client-users?id=${id}`, {
+      method: "DELETE",
+    });
+
     await loadClients();
   }
 
@@ -653,31 +675,53 @@ export default function ClientsPage() {
                                 border: "1px solid #eef2f6",
                                 display: "flex",
                                 alignItems: "center",
+                                justifyContent: "space-between",
                                 gap: 1.5,
                                 bgcolor: "#fff",
                               }}
                             >
-                              <Avatar
-                                sx={{
-                                  bgcolor: "#f5f3ff",
-                                  color: "#7c3aed",
-                                }}
+                              <Stack
+                                direction="row"
+                                spacing={1.5}
+                                sx={{ alignItems: "center", minWidth: 0 }}
                               >
-                                <Person />
-                              </Avatar>
-
-                              <Box sx={{ minWidth: 0 }}>
-                                <Typography sx={{ fontWeight: 950 }} noWrap>
-                                  {u.name}
-                                </Typography>
-                                <Typography
-                                  color="text.secondary"
-                                  sx={{ fontSize: 13 }}
-                                  noWrap
+                                <Avatar
+                                  sx={{
+                                    bgcolor: "#f5f3ff",
+                                    color: "#7c3aed",
+                                  }}
                                 >
-                                  {u.email}
-                                </Typography>
-                              </Box>
+                                  <Person />
+                                </Avatar>
+
+                                <Box sx={{ minWidth: 0 }}>
+                                  <Typography sx={{ fontWeight: 950 }} noWrap>
+                                    {u.name}
+                                  </Typography>
+                                  <Typography
+                                    color="text.secondary"
+                                    sx={{ fontSize: 13 }}
+                                    noWrap
+                                  >
+                                    {u.email}
+                                  </Typography>
+                                </Box>
+                              </Stack>
+
+                              <Stack direction="row" spacing={0.5}>
+                                <IconButton
+                                  color="primary"
+                                  onClick={() => editUserModal(u)}
+                                >
+                                  <Edit />
+                                </IconButton>
+                                <IconButton
+                                  color="error"
+                                  onClick={() => deleteUser(u.id)}
+                                >
+                                  <Delete />
+                                </IconButton>
+                              </Stack>
                             </Box>
                           ))}
 
@@ -808,7 +852,7 @@ export default function ClientsPage() {
             maxWidth="sm"
           >
             <DialogTitle sx={{ fontWeight: 950 }}>
-              Criar acesso do cliente
+              {userForm.id ? "Editar acesso do cliente" : "Criar acesso do cliente"}
             </DialogTitle>
 
             <DialogContent>
@@ -833,6 +877,7 @@ export default function ClientsPage() {
 
                 <TextField
                   label="Senha inicial"
+                  placeholder={userForm.id ? "Deixe em branco para manter a atual" : ""}
                   value={userForm.password}
                   onChange={(e) =>
                     setUserForm((p) => ({ ...p, password: e.target.value }))
@@ -845,7 +890,7 @@ export default function ClientsPage() {
             <DialogActions sx={{ p: 3 }}>
               <Button onClick={() => setOpenUser(false)}>Cancelar</Button>
               <Button variant="contained" onClick={saveUser}>
-                Criar acesso
+                {userForm.id ? "Salvar acesso" : "Criar acesso"}
               </Button>
             </DialogActions>
           </Dialog>
