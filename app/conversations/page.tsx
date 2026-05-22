@@ -182,14 +182,21 @@ export default function ConversationsPage() {
     });
   }, [conversations, search]);
 
-  const selected = conversations.find((c) => c.contact === selectedContact);
+  const selected = useMemo(
+    () => conversations.find((c) => c.contact === selectedContact),
+    [conversations, selectedContact]
+  );
 
-  const messages = selected?.messages
-    ? [...selected.messages].sort(
-        (a: any, b: any) =>
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      )
-    : [];
+  const messages = useMemo(
+    () =>
+      selected?.messages
+        ? [...selected.messages].sort(
+            (a: any, b: any) =>
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          )
+        : [],
+    [selected?.messages]
+  );
 
   const lastMessage = messages[messages.length - 1];
 
@@ -212,15 +219,15 @@ export default function ConversationsPage() {
   }, [selected?.businessNumber, messages]);
 
   useEffect(() => {
-    if (selected?.businessNumber) {
-      setSelectedFrom(normalizePhone(selected.businessNumber));
+    const nextFrom = selected?.businessNumber
+      ? normalizePhone(selected.businessNumber)
+      : availableNumbers[0] || "";
+
+    if (nextFrom && nextFrom !== selectedFrom) {
+      setSelectedFrom(nextFrom);
       return;
     }
-
-    if (availableNumbers[0]) {
-      setSelectedFrom(availableNumbers[0]);
-    }
-  }, [selected?.businessNumber, availableNumbers]);
+  }, [selected?.businessNumber, availableNumbers, selectedFrom]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
